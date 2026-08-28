@@ -16,6 +16,10 @@
   --sp-tint: #F0F6FF;         /* secondary button hover */
   --sp-error: #B42318;        /* form validation and rejected state */
   --sp-warning: #B25E09;      /* changes-requested and the safety flag */
+  --sp-earned: #1E7E34;       /* ONLY the Earned-today tile. The single
+                                 deliberate green in the product — a live
+                                 positive earnings signal that must read
+                                 differently from the neutral KPI tiles. */
 
   /* Tier metallics */
   --tier-bronze: #B0703C;     --tier-bronze-bg: #FBF1E9;
@@ -1609,4 +1613,89 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
 @media (max-width: 575.98px) {
   .sp-submitbar { flex-direction: column; align-items: stretch; }
   .sp-submitbar .btn-sp-primary { margin-left: 0; }
+}
+
+/* ===============================================================
+   AI Insights
+   =============================================================== */
+.sp-insights-head { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.sp-insights-icon { flex: 0 0 22px; width: 22px; height: 22px; color: var(--sp-blue); }
+
+.sp-insights { list-style: none; margin: 0; padding: 0; }
+.sp-insight {
+  display: flex;
+  gap: .75rem;
+  padding: .8rem .9rem;
+  margin-bottom: .5rem;
+  border: 1px solid var(--sp-border);
+  border-left-width: 2px;
+  border-radius: 10px;
+  background-color: var(--sp-bg);
+}
+.sp-insight-glyph { flex: 0 0 18px; width: 18px; height: 18px; margin-top: .15rem; color: var(--sp-muted); }
+.sp-insight-glyph svg { width: 100%; height: 100%; }
+.sp-insight-headline { font-size: var(--sp-fs-4); font-weight: 600; color: var(--sp-navy); }
+.sp-insight-detail { font-size: var(--sp-fs-4); color: var(--sp-muted); }
+.sp-insight-cta {
+  display: inline-block;
+  margin-top: .4rem;
+  color: var(--sp-blue);
+  font-size: var(--sp-fs-4);
+  font-weight: 600;
+  text-decoration: none;
+}
+.sp-insight-cta:hover { color: var(--sp-blue-hover); text-decoration: underline; }
+
+/* Tones reuse registered colours only. */
+.sp-insight-opportunity,
+.sp-insight-celebration { border-left-color: var(--sp-blue); }
+.sp-insight-opportunity .sp-insight-glyph,
+.sp-insight-celebration .sp-insight-glyph { color: var(--sp-blue); }
+.sp-insight-caution { border-left-color: var(--sp-warning); }
+.sp-insight-caution .sp-insight-glyph { color: var(--sp-warning); }
+.sp-insight-informational { border-left-color: var(--sp-border-strong); }
+
+/* The fallback must not masquerade as a real finding. */
+.sp-insight-plain { border-left-color: var(--sp-border); background-color: var(--sp-white); }
+
+.sp-insights-foot { margin-top: .75rem; font-size: 11px; color: var(--sp-muted); }
+
+/* ===============================================================
+   Earned-today tile — the only green in the product
+   =============================================================== */
+.sp-earned { color: var(--sp-earned); }
+.sp-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: .4rem;
+  border-radius: 50%;
+  background-color: var(--sp-earned);
+  vertical-align: middle;
+}
+
+/* ===============================================================
+   Log Work layout: summary + form left, entries + submit right
+   =============================================================== */
+.sp-log-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 5fr 7fr;
+  grid-template-areas:
+    "summary entries"
+    "form    entries"
+    "form    submit";
+  align-items: start;
+}
+.sp-log-summary { grid-area: summary; }
+.sp-log-form { grid-area: form; }
+.sp-log-entries { grid-area: entries; }
+.sp-log-submit { grid-area: submit; }
+
+/* Phones see what they've done before being asked to add more. */
+@media (max-width: 991.98px) {
+  .sp-log-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas: "summary" "entries" "form" "submit";
+  }
 }

@@ -127,6 +127,7 @@ The official Spectrum values, defined as custom properties in `spectrum.css`:
 | `--sp-border` | `#E1E6ED` | hairlines |
 | `--sp-error` | `#B42318` | form validation and rejected state |
 | `--sp-warning` | `#B25E09` | changes-requested state and the safety flag |
+| `--sp-earned` | `#1E7E34` | **the one green in the product** — see below |
 
 Bootstrap's `--bs-primary` and `--bs-link-color` are overridden to `--sp-blue`.
 
@@ -138,6 +139,14 @@ keeps them meaningful:
 | Bronze | `#B0703C` | `#FBF1E9` |
 | Silver | `#7A8794` | `#F2F4F7` |
 | Gold | `#C8992A` | `#FDF6E3` |
+
+**The single green exception.** `--sp-earned` is used in exactly two places:
+the "Earned today" KPI value and its small live-indicator dot. It is a
+deliberate break from the otherwise green-free palette because that tile is a
+live, positive earnings signal and has to read differently from the neutral KPI
+tiles beside it. The shade is muted rather than saturated so it stays consistent
+with the flat corporate aesthetic. Do not use it anywhere else — a hue-space
+audit of the CSS confirms it is the only green-hue colour in the project.
 
 Tier badges pair the metallic with a 1px/2px/3px border-weight progression, so
 rank still reads in greyscale and for colorblind users. Tier colour appears on
@@ -356,6 +365,19 @@ job × modifier combinations were compared between the two implementations and
 agree exactly. **The server always recalculates on write** — a points value in
 the POST body is ignored.
 
+### Daily totals — approved only
+
+`store.get_day_summary(agent_id, date)` is the **single source of truth** for a
+day's figures and returns `{jobs, minutes, points, est_value, pending_count}`
+(plus `draft_count` / `draft_points` / `submitted_at` describing workflow state).
+
+Only **approved** entries count toward jobs, minutes, points and value — the same
+"not banked yet" rule the dollar ledger uses. A day holding only drafts or
+submitted work reports `0 / 0 / 0 / $0.00`, with a caption saying how many entries
+are still awaiting approval, so the zeroes are never mistaken for "nothing
+happened". The entry cards themselves render for that date whatever their status,
+so an agent can still see what is pending, rejected or approved.
+
 ### Lifecycle
 
 ```
@@ -389,6 +411,38 @@ crosses a `mock_data` threshold. Verified the crossover fires at the exact
 boundary: from 3,180 points, 15 residential installs leaves 4,980 (Silver) and
 16 reaches 5,100 (Gold).
 
+## AI Insights
+
+> **Rule-based, not an LLM.** `dashboard/insights.py` is a fixed set of
+> conditions evaluated against the agent's own logged work — no model call, no
+> keyword matching, no inference. The card footer says "Generated from your
+> recent activity", which is what actually happens. This is labelled the same
+> way the chatbot is labelled a keyword stub.
+
+`generate_insights(agent_id)` evaluates six rules in priority order and returns
+up to four that fire, each `{icon, headline, detail, tone, cta_label, cta_url}`:
+
+1. **Tier proximity** (opportunity) — within 500 points of the next tier, with
+   the install count computed from the same job math as the what-if simulator.
+2. **Streak** (celebration) — 3+ consecutive days with approved work.
+3. **Changes requested** (caution) — entries waiting on the agent's edits.
+4. **Modifier opportunity** (informational) — no premium upsell or first-time
+   fix logged in 14 days.
+5. **Pending value** (informational) — submitted points not yet approved.
+6. **Active program match** (opportunity) — skips gracefully today, since seeded
+   programs carry no job-type targeting; it fires once a `job_types` field exists
+   rather than inventing a match.
+
+If fewer than two fire, a calmer fallback card is shown, styled without a
+tone-coloured border so it cannot be mistaken for a real finding. Tones reuse
+only registered colours. Run the self-check with:
+
+```bash
+.venv/bin/python -c "import os,django,runpy; \
+  os.environ.setdefault('DJANGO_SETTINGS_MODULE','spectrum_portal.settings'); \
+  django.setup(); runpy.run_module('dashboard.insights', run_name='__main__')"
+```
+
 ## Interactive features
 
 - **Tier explorer** (landing) — ARIA tablist, 200ms panel crossfade, sliding 2px
@@ -398,7 +452,9 @@ boundary: from 3,180 points, 15 residential installs leaves 4,980 (Silver) and
 - **Reveal on scroll** — one shared `IntersectionObserver` staggers `.u-reveal`
   elements by 60ms
 - **Count-up numbers** — `SP.animateCount` with an ease-out curve, used by the
-  KPI cards, the balance, and the landing headline stat
+  KPI cards, the balance, the day summary and the landing headline stat
+- **AI Insights** — rule-based personalised cards (see above); no LLM
+- **Earned today** — live KPI tile replacing the old CSAT card, in `--sp-earned`
 - **Leaderboard** — sortable on all five columns with a caret that rotates 180°,
   120ms debounced text filter, multi-select region chips, expandable detail rows
   (one at a time), and a live "Showing X of N" count. The current agent's row

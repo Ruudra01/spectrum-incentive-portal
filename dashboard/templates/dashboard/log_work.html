@@ -20,12 +20,11 @@
       </form>
     </header>
 
-    <div class="row g-3 mt-1">
+    <div class="sp-log-grid mt-3">
 
-      {# ---------------- LEFT: the day's entries ---------------- #}
-      <div class="col-lg-7">
-
-        <div class="sp-daystrip">
+      {# ---- Summary: APPROVED work only, for the selected date ---- #}
+      <div class="sp-log-summary">
+        <div class="sp-daystrip mb-0">
           <div class="sp-daystat">
             <p class="sp-daystat-value mb-0" data-count="{{ summary.jobs }}">0</p>
             <p class="sp-daystat-label">Jobs</p>
@@ -39,13 +38,21 @@
             <p class="sp-daystat-label">Points</p>
           </div>
           <div class="sp-daystat">
-            <p class="sp-daystat-value mb-0">$<span data-count="{{ summary.dollars|floatformat:2 }}" data-count-decimals="2">0</span></p>
+            <p class="sp-daystat-value mb-0">$<span data-count="{{ summary.est_value|floatformat:2 }}" data-count-decimals="2">0</span></p>
             <p class="sp-daystat-label">Est. value</p>
           </div>
         </div>
+        {% if summary.pending_count %}
+        <p class="sp-muted sp-small mt-2 mb-0">
+          {{ summary.pending_count }} entr{{ summary.pending_count|pluralize:"y,ies" }} still awaiting approval
+        </p>
+        {% endif %}
+      </div>
 
+      {# ---- Entries for the day, whatever their status ---- #}
+      <div class="sp-log-entries">
         {% if summary.submitted_at %}
-        <p class="sp-awaiting mb-3">Awaiting review &middot; submitted {{ summary.submitted_at }}</p>
+        <p class="sp-awaiting">Awaiting review &middot; submitted {{ summary.submitted_at }}</p>
         {% endif %}
 
         {% for entry in entries %}
@@ -113,20 +120,10 @@
           <button type="button" class="btn-sp-primary" id="spFocusForm">Add an entry</button>
         </div>
         {% endfor %}
-
-        {% if summary.draft_count %}
-        <div class="sp-submitbar" id="spSubmitBar">
-          <span class="sp-submitbar-text">
-            {{ summary.draft_count }} entr{{ summary.draft_count|pluralize:"y,ies" }} ready to submit
-            &middot; {{ summary.draft_points }} points
-          </span>
-          <button type="button" class="btn-sp-primary" id="spOpenSubmit">Submit day for approval</button>
-        </div>
-        {% endif %}
       </div>
 
-      {# ---------------- RIGHT: add entry ---------------- #}
-      <div class="col-lg-5">
+      {# ---- Add entry ---- #}
+      <div class="sp-log-form">
         <div class="sp-card p-4 sp-form-sticky" id="spEntryCard" data-calc="{{ calc_data }}">
           <h2 class="mb-3" id="spFormTitle">Add an entry</h2>
 
@@ -242,6 +239,21 @@
           </form>
         </div>
       </div>
+      </div>
+
+      {# ---- Submit the day ---- #}
+      <div class="sp-log-submit">
+        {% if summary.draft_count %}
+        <div class="sp-submitbar" id="spSubmitBar">
+          <span class="sp-submitbar-text">
+            {{ summary.draft_count }} entr{{ summary.draft_count|pluralize:"y,ies" }} ready to submit
+            &middot; {{ summary.draft_points }} points
+          </span>
+          <button type="button" class="btn-sp-primary" id="spOpenSubmit">Submit day for approval</button>
+        </div>
+        {% endif %}
+      </div>
+
     </div>
   </div>
 </div>

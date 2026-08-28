@@ -6,7 +6,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from . import chat_responses, mock_data, store
+from . import chat_responses, insights, mock_data, store
 from .decorators import agent_required, path_allowed, role_required, role_home_url
 
 
@@ -62,6 +62,8 @@ def agent_dashboard(request):
 
     # Tier and next-tier progress are precomputed per row so the expandable
     # detail panels ship server-rendered and the JS only toggles them.
+    today = date.today().isoformat()
+    today_summary = store.get_day_summary(agent["id"], today)
     points_summary = store.agent_points_summary(agent["id"])
     ledger = {
         "approved_points": points_summary["approved_points"],
@@ -101,6 +103,8 @@ def agent_dashboard(request):
             "faq": chat_responses.FAQ_RESPONSES,
             # Ledger
             "ledger": ledger,
+            "today_summary": today_summary,
+            "insights": insights.generate_insights(agent["id"]),
             "point_value": mock_data.POINT_VALUE_USD,
             "next_payout": mock_data.NEXT_PAYOUT_DATE,
             # Simulator mirrors the same job/tier numbers the server uses.
@@ -397,8 +401,7 @@ def log_work(request):
         entry["editable"] = entry["status"] in store.EDITABLE_STATUSES
         entry["reviewer_name"] = mock_data.MANAGER_PROFILE["name"] if entry["reviewer_id"] else ""
 
-    summary = store.day_summary(agent["id"], on_date)
-    summary["dollars"] = mock_data.points_to_usd(summary["points"])
+    summary = store.get_day_summary(agent["id"], on_date)
 
     return render(request, "dashboard/log_work.html", {
         "on_date": on_date,

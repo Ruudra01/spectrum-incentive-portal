@@ -1,0 +1,53 @@
+{# AI Insights — rule-based, generated from the agent's own logged activity. #}
+<div class="sp-card p-4 mt-3">
+  <div class="sp-insights-head">
+    <svg class="sp-insights-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 2.5l1.6 4.4 4.4 1.6-4.4 1.6L12 14.5l-1.6-4.4L6 8.5l4.4-1.6z"/>
+      <path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>
+    </svg>
+    <div>
+      <h2 class="mb-0">AI Insights</h2>
+      <p class="sp-muted sp-small mb-0">Personalized for you</p>
+    </div>
+  </div>
+
+  <ul class="sp-insights">
+    {% for insight in insights %}
+    <li class="sp-insight sp-insight-{{ insight.tone }}{% if insight.is_fallback %} sp-insight-plain{% endif %} u-reveal">
+      <span class="sp-insight-glyph" aria-hidden="true">
+        {% if insight.icon == 'target' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/>
+        </svg>
+        {% elif insight.icon == 'flame' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round">
+          <path d="M12 3s5 4.2 5 8.5a5 5 0 0 1-10 0C7 9 9 7.5 9 7.5s.5 2 1.5 2S12 3 12 3z"/>
+        </svg>
+        {% elif insight.icon == 'alert' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+          <path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.5v.01"/>
+        </svg>
+        {% elif insight.icon == 'clock' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+          <circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>
+        </svg>
+        {% else %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round">
+          <path d="M12 2.5l1.6 4.4 4.4 1.6-4.4 1.6L12 14.5l-1.6-4.4L6 8.5l4.4-1.6z"/>
+        </svg>
+        {% endif %}
+      </span>
+      <div class="sp-insight-body">
+        <p class="sp-insight-headline mb-1">{{ insight.headline }}</p>
+        <p class="sp-insight-detail mb-0">{{ insight.detail }}</p>
+        {% if insight.cta_label %}
+        <a class="sp-insight-cta" href="{{ insight.cta_url }}">{{ insight.cta_label }} &rarr;</a>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <p class="sp-insights-foot mb-0">Generated from your recent activity.</p>
+</div>

@@ -29,6 +29,26 @@
         </div>
       </div>
       {% endfor %}
+
+      {# Live earnings tile. --sp-earned is used here and nowhere else. #}
+      <div class="col-6 col-lg-3">
+        <div class="sp-card sp-kpi">
+          <p class="sp-kpi-label">
+            <span class="sp-live-dot" aria-hidden="true"></span>Earned today
+          </p>
+          <p class="sp-kpi-value sp-earned mb-2">
+            $<span data-count="{{ today_summary.est_value|floatformat:2 }}" data-count-decimals="2">0</span>
+          </p>
+          {% if today_summary.jobs %}
+          <p class="sp-delta mb-0">From {{ today_summary.jobs }} approved job{{ today_summary.jobs|pluralize }} today</p>
+          {% else %}
+          <p class="sp-delta mb-0">
+            No approved work yet today &middot;
+            <a href="{% url 'dashboard:log_work' %}">Log work</a>
+          </p>
+          {% endif %}
+        </div>
+      </div>
     </div>
 
     {# 3. Two-column area #}
@@ -140,6 +160,8 @@
             <p class="sp-muted sp-small mb-0">Top tier reached</p>
           {% endif %}
         </div>
+
+        {% include "dashboard/partials/_ai_insights.html" %}
 
         {# --- What-if simulator --- #}
         <div class="sp-card p-4 mt-3" id="spSim" data-sim="{{ sim_data }}">

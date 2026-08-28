@@ -337,21 +337,35 @@ def submit_day(agent_id, on_date):
         return count, points
 
 
-def day_summary(agent_id, on_date):
-    """Totals for one day plus what is still sitting in draft."""
+def get_day_summary(agent_id, on_date):
+    """Totals for one day. THE single source of truth for daily figures.
+
+    Only APPROVED entries count toward jobs/minutes/points/value — the same
+    "not banked yet" rule the dollar ledger uses. A day holding only drafts or
+    submitted work reports zeroes, with pending_count saying why.
+
+    draft_count / draft_points / submitted_at describe the day's workflow
+    state and are deliberately separate from the approved totals.
+    """
     with _LOCK:
         entries = [l for l in STORE["work_logs"]
                    if l["agent_id"] == agent_id and l["date"] == on_date]
-        drafts = [l for l in entries if l["status"] == STATUS_DRAFT]
-        submitted = [l for l in entries if l["status"] == STATUS_SUBMITTED]
-        return {
-            "jobs": len(entries),
-            "minutes": sum(l["duration_minutes"] for l in entries),
-            "points": sum(l["points"] for l in entries),
-            "draft_count": len(drafts),
-            "draft_points": sum(l["points"] for l in drafts),
-            "submitted_at": submitted[0]["submitted_at"] if submitted else None,
-        }
+
+    approved = [l for l in entries if l["status"] == STATUS_APPROVED]
+    drafts = [l for l in entries if l["status"] == STATUS_DRAFT]
+    submitted = [l for l in entries if l["status"] == STATUS_SUBMITTED]
+    points = sum(l["points"] for l in approved)
+
+    return {
+        "jobs": len(approved),
+        "minutes": sum(l["duration_minutes"] for l in approved),
+        "points": points,
+        "est_value": mock_data.points_to_usd(points),
+        "pending_count": len(entries) - len(approved),
+        "draft_count": len(drafts),
+        "draft_points": sum(l["points"] for l in drafts),
+        "submitted_at": submitted[0]["submitted_at"] if submitted else None,
+    }
 
 
 def agent_points_summary(agent_id):
@@ -540,9 +554,15 @@ if __name__ == "__main__":
     assert summary["approved_points"] > 0 and summary["pending_points"] > 0
     assert summary["approved_points"] != summary["pending_points"]
 
-    # Day summary
-    day = day_summary(417, today)
-    assert day["jobs"] >= 3 and day["minutes"] > 0
+    # Day summary counts APPROVED only
+    day = get_day_summary(417, today)
+    assert day["jobs"] == 0 and day["points"] == 0 and day["est_value"] == 0.0, day
+    assert day["pending_count"] > 0, "pending work is reported, not counted"
+    approved_day = next(e["date"] for e in get_entries_for_agent(417)
+                        if e["status"] == STATUS_APPROVED)
+    past = get_day_summary(417, approved_day)
+    assert past["jobs"] > 0 and past["points"] > 0
+    assert past["est_value"] == mock_data.points_to_usd(past["points"])
 
     # Programs still work
     assert count_pending_programs() == 2

@@ -247,10 +247,11 @@ MANAGER_PROFILE["direct_report_ids"] = [a["id"] for a in LEADERBOARD]
 # ---------------------------------------------------------------------------
 # Agent dashboard figures
 # ---------------------------------------------------------------------------
+# The fourth dashboard tile is "Earned today", computed live from
+# store.get_day_summary rather than being a static figure here.
 KPI_STATS = [
     {"label": "Installs this month", "value": 38, "unit": "", "delta": 12.5, "direction": "up"},
     {"label": "Upsell conversion", "value": 24.8, "unit": "%", "delta": 3.1, "direction": "up"},
-    {"label": "CSAT", "value": 4.6, "unit": "/ 5", "delta": 0.2, "direction": "down"},
     {"label": "Points this week", "value": 240, "unit": "pts", "delta": 18.0, "direction": "up"},
 ]
 
@@ -470,6 +471,10 @@ if __name__ == "__main__":
     assert points == sorted(points, reverse=True), "ranks must follow points"
     assert {get_tier(a["points"])["slug"] for a in LEADERBOARD} == {"bronze", "silver", "gold"}
     assert get_agent(417)["rank"] == 4, "Dana stays rank 4 on her team"
+    # The profile and the leaderboard row are two views of the same agent; if
+    # they drift, the dashboard and the insight engine disagree.
+    assert get_agent(AGENT_PROFILE["id"])["points"] == AGENT_PROFILE["points"]
+    assert get_agent(AGENT_PROFILE["id"])["rank"] == AGENT_PROFILE["rank"]
     assert len(reports_for_manager(884)) == 18 == MANAGER_PROFILE["team_size"]
 
     # Roles and accounts
