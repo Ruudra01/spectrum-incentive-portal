@@ -1,0 +1,448 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Programs — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    <header class="sp-page-header">
+      <div>
+        <h1>Incentive programs</h1>
+        <p class="sp-muted sp-small mb-0 mt-1">You author them; {{ current_user.manager_name }} approves them.</p>
+      </div>
+      {% if not creating %}
+      <a class="btn-sp-primary ms-auto" href="?new=1">Create program</a>
+      {% else %}
+      <a class="btn-sp-secondary ms-auto" href="{% url 'dashboard:manager_programs' %}">Back to list</a>
+      {% endif %}
+    </header>
+
+    {% if date_error %}
+    <div class="sp-alert mt-3" role="alert">The end date must fall after the start date.</div>
+    {% endif %}
+
+    {% if not creating %}
+    {# ---------------- LIST ---------------- #}
+    <div class="sp-card mt-3" id="spProgramList">
+      <div class="sp-toolbar">
+        <div class="sp-chips" id="spProgramChips" role="group" aria-label="Filter by status">
+          <button type="button" class="sp-chip" data-value="all" aria-pressed="true">All</button>
+          <button type="button" class="sp-chip" data-value="draft" aria-pressed="false">Draft</button>
+          <button type="button" class="sp-chip" data-value="pending" aria-pressed="false">Submitted</button>
+          <button type="button" class="sp-chip" data-value="approved" aria-pressed="false">Approved</button>
+          <button type="button" class="sp-chip" data-value="rejected" aria-pressed="false">Rejected</button>
+          <button type="button" class="sp-chip" data-value="changes_requested" aria-pressed="false">Changes requested</button>
+        </div>
+        <label class="visually-hidden" for="spProgramSort">Sort programs</label>
+        <select class="sp-control sp-control-sm ms-auto" id="spProgramSort" style="max-width: 190px">
+          <option value="created">Created date</option>
+          <option value="start">Start date</option>
+          <option value="budget">Budget</option>
+        </select>
+      </div>
+
+      <div class="sp-table-wrap">
+        <table class="sp-table" id="spProgramTable">
+          <thead>
+            <tr>
+              <th scope="col">Program</th>
+              <th scope="col">Dates</th>
+              <th scope="col">Status</th>
+              <th scope="col" class="sp-num">Budget</th>
+              <th scope="col" class="sp-num">Participants</th>
+              <th scope="col"></th>
+            </tr>
+          </thead>
+          <tbody id="spProgramBody">
+            {% for program in programs %}
+            <tr data-status="{{ program.status }}" data-created="{{ program.created_at }}"
+                data-start="{{ program.start_date }}" data-budget="{{ program.budget_estimate }}">
+              <td>
+                <strong>{{ program.name }}</strong>
+                <p class="sp-muted sp-small mb-0">{{ program.metric_label }}</p>
+              </td>
+              <td class="sp-muted">{{ program.start_date }} → {{ program.end_date }}</td>
+              <td>
+                <span class="sp-status sp-status-{{ program.status }}">{{ program.status|cut:"_"|title }}</span>
+                {% if program.phase %}<span class="sp-muted sp-small d-block mt-1">{{ program.phase }}</span>{% endif %}
+              </td>
+              <td class="sp-num">${{ program.budget_estimate }}</td>
+              <td class="sp-num">{{ program.expected_participants }}</td>
+              <td>
+                {% if program.status in editable_statuses %}
+                <a class="btn-sp-secondary sp-btn-sm" href="?edit={{ program.id }}">Edit</a>
+                {% else %}
+                <span class="sp-muted sp-small">Read-only</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr class="sp-empty-row"><td colspan="6">No programs yet. Create your first.</td></tr>
+            {% endfor %}
+            <tr class="sp-empty-row" id="spProgramEmpty" hidden><td colspan="6">No programs match</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    {# ---------------- CREATE / EDIT ---------------- #}
+    <div class="sp-program-grid mt-3">
+      <div>
+        <form method="post" id="spProgramForm" data-rate="{{ point_value }}" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="program_id" value="{{ editing.id|default:'' }}">
+          <input type="hidden" name="action" value="draft" id="spProgramAction">
+
+          {% if editing.director_note %}
+          <div class="sp-review-note mb-3">
+            <strong>{{ current_user.manager_name }} asked for changes:</strong> {{ editing.director_note }}
+          </div>
+          {% endif %}
+
+          <ol class="sp-steps" id="spSteps">
+            <li class="sp-step-pip" data-step="1"><span>1</span> Basics</li>
+            <li class="sp-step-pip" data-step="2"><span>2</span> Rules</li>
+            <li class="sp-step-pip" data-step="3"><span>3</span> Budget &amp; target</li>
+          </ol>
+
+          {# --- 1. Basics --- #}
+          <fieldset class="sp-card p-4 mb-3" data-section="1">
+            <legend class="sp-section-legend">1 · Basics</legend>
+            <div class="sp-field">
+              <label class="sp-label" for="spName">Program name</label>
+              <input class="sp-control" type="text" id="spName" name="name" value="{{ editing.name|default:'' }}" required>
+            </div>
+            <div class="sp-field">
+              <label class="sp-label" for="spDesc">Description</label>
+              <textarea class="sp-control" id="spDesc" name="description" rows="2">{{ editing.description|default:'' }}</textarea>
+            </div>
+            <div class="row g-2">
+              <div class="col-sm-6 sp-field">
+                <label class="sp-label" for="spStart">Starts</label>
+                <input class="sp-control" type="date" id="spStart" name="start_date" value="{{ editing.start_date|default:'' }}" required>
+              </div>
+              <div class="col-sm-6 sp-field">
+                <label class="sp-label" for="spEnd">Ends</label>
+                <input class="sp-control" type="date" id="spEnd" name="end_date" value="{{ editing.end_date|default:'' }}" required>
+                <p class="sp-field-error" id="spEndError" hidden></p>
+              </div>
+            </div>
+            <div class="sp-field mb-0">
+              <label class="sp-label" for="spScope">Scope</label>
+              <select class="sp-control" id="spScope" name="target_scope">
+                {% for scope in scopes %}
+                <option value="{{ scope.code }}" {% if editing.target_scope == scope.code %}selected{% endif %}>{{ scope.label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </fieldset>
+
+          {# --- 2. Rules --- #}
+          <fieldset class="sp-card p-4 mb-3" data-section="2">
+            <legend class="sp-section-legend">2 · Rules</legend>
+            <div class="sp-field">
+              <span class="sp-label">Qualifying job types</span>
+              <div class="sp-mods" id="spJobTypes">
+                {% for group in job_groups %}{% for job in group.jobs %}
+                <label class="sp-mod">
+                  <input type="checkbox" name="job_types" value="{{ job.code }}"
+                         {% if job.code in editing.job_types %}checked{% endif %}>
+                  <span class="sp-mod-body">{{ job.label }}<span class="sp-mod-effect">{{ job.base_points }}</span></span>
+                </label>
+                {% endfor %}{% endfor %}
+              </div>
+            </div>
+
+            <span class="sp-label">Bonus structure</span>
+            <p class="sp-muted sp-small">When an agent completes N of a job type, award a bonus.</p>
+            <div id="spRules">
+              {% for rule in editing.bonus_structure %}
+              <div class="sp-rule-row">
+                <span>When</span>
+                <input class="sp-control sp-control-sm sp-rule-count" type="number" name="rule_count" min="1" value="{{ rule.count }}">
+                <select class="sp-control sp-control-sm sp-rule-job" name="rule_job">
+                  {% for job in job_types %}
+                  <option value="{{ job.code }}" {% if rule.job_type == job.code %}selected{% endif %}>{{ job.label }}</option>
+                  {% endfor %}
+                </select>
+                <span>award</span>
+                <input class="sp-control sp-control-sm sp-rule-bonus" type="number" name="rule_bonus" min="0" step="10" value="{{ rule.bonus }}">
+                <span>pts</span>
+                <button type="button" class="btn-sp-secondary sp-btn-sm sp-rule-remove" aria-label="Remove rule">&times;</button>
+              </div>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn-sp-secondary sp-btn-sm mt-2" id="spAddRule">Add rule</button>
+            <p class="sp-field-error mt-2" id="spRuleError" hidden>Add at least one bonus rule.</p>
+          </fieldset>
+
+          {# --- 3. Budget & target --- #}
+          <fieldset class="sp-card p-4 mb-3" data-section="3">
+            <legend class="sp-section-legend">3 · Budget &amp; target</legend>
+            <div class="row g-2">
+              <div class="col-sm-6 sp-field">
+                <label class="sp-label" for="spParticipants">Expected participants</label>
+                <input class="sp-control" type="number" id="spParticipants" name="expected_participants"
+                       min="0" value="{{ editing.expected_participants|default:0 }}">
+              </div>
+              <div class="col-sm-6 sp-field">
+                <label class="sp-label" for="spBudget">Estimated cost (USD)</label>
+                <input class="sp-control" type="number" id="spBudget" name="budget_estimate"
+                       min="0" value="{{ editing.budget_estimate|default:0 }}">
+                <p class="sp-muted sp-small mb-0 mt-1" id="spBudgetHint"></p>
+              </div>
+            </div>
+            <div class="row g-2">
+              <div class="col-sm-6 sp-field mb-0">
+                <label class="sp-label" for="spMetric">Success metric</label>
+                <select class="sp-control" id="spMetric" name="success_metric">
+                  <option value="">Choose a metric</option>
+                  {% for metric in metrics %}
+                  <option value="{{ metric.code }}" {% if editing.success_metric == metric.code %}selected{% endif %}>{{ metric.label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-6 sp-field mb-0">
+                <label class="sp-label" for="spTarget">Target</label>
+                <input class="sp-control" type="number" id="spTarget" name="success_target"
+                       min="0" value="{{ editing.success_target|default:0 }}">
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="sp-card p-3 mb-3" id="spIncomplete" hidden>
+            <p class="sp-label mb-2">Finish these before submitting</p>
+            <ul class="sp-missing mb-0" id="spMissing"></ul>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2">
+            <button type="submit" class="btn-sp-secondary" id="spSaveDraftBtn">Save as draft</button>
+            <button type="submit" class="btn-sp-primary" id="spSubmitBtn">Submit for director approval</button>
+          </div>
+        </form>
+      </div>
+
+      {# --- Live preview, exactly as the director will see it --- #}
+      <div>
+        <div class="sp-card p-4 sp-form-sticky">
+          <p class="sp-eyebrow mb-2">Preview</p>
+          <p class="sp-muted sp-small mb-3">What {{ current_user.manager_name }} will review.</p>
+          <h2 class="mb-1" id="pvName">Untitled program</h2>
+          <p class="sp-muted sp-small" id="pvDates">Dates not set</p>
+          <p class="mb-3" id="pvDesc"></p>
+          <dl class="sp-summary">
+            <div><dt>Scope</dt><dd id="pvScope">My team</dd></div>
+            <div><dt>Job types</dt><dd id="pvJobs">None selected</dd></div>
+            <div><dt>Rules</dt><dd id="pvRules">None</dd></div>
+            <div><dt>Participants</dt><dd id="pvParticipants">0</dd></div>
+            <div><dt>Budget</dt><dd id="pvBudget">$0</dd></div>
+            <div><dt>Success metric</dt><dd id="pvMetric">—</dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    /* --- list filtering / sorting --- */
+    var chips = document.getElementById("spProgramChips");
+    if (chips) {
+      var body = document.getElementById("spProgramBody");
+      var empty = document.getElementById("spProgramEmpty");
+      var rows = Array.prototype.slice.call(body.querySelectorAll("tr[data-status]"));
+      chips.addEventListener("click", function (e) {
+        var chip = e.target.closest(".sp-chip");
+        if (!chip) return;
+        chips.querySelectorAll(".sp-chip").forEach(function (c) {
+          c.setAttribute("aria-pressed", String(c === chip));
+        });
+        var want = chip.dataset.value;
+        var shown = 0;
+        rows.forEach(function (row) {
+          var ok = want === "all" || row.dataset.status === want;
+          row.hidden = !ok;
+          if (ok) shown++;
+        });
+        empty.hidden = shown > 0;
+      });
+      document.getElementById("spProgramSort").addEventListener("change", function (e) {
+        var key = e.target.value;
+        rows.sort(function (a, b) {
+          if (key === "budget") return Number(b.dataset.budget) - Number(a.dataset.budget);
+          return (b.dataset[key] || "").localeCompare(a.dataset[key] || "");
+        });
+        rows.forEach(function (r) { body.append(r); });
+        body.append(empty);
+      });
+      return;
+    }
+
+    /* --- create / edit form --- */
+    var form = document.getElementById("spProgramForm");
+    if (!form) return;
+    var RATE = parseFloat(form.dataset.rate);
+    var rulesBox = document.getElementById("spRules");
+    var jobOptions = Array.prototype.slice
+      .call(document.querySelectorAll("#spJobTypes input")).map(function (input) {
+        return { code: input.value, label: input.parentNode.querySelector(".sp-mod-body").childNodes[0].textContent.trim() };
+      });
+
+    function ruleRow(count, job, bonus) {
+      var row = document.createElement("div");
+      row.className = "sp-rule-row";
+      row.innerHTML = '<span>When</span>' +
+        '<input class="sp-control sp-control-sm sp-rule-count" type="number" name="rule_count" min="1" value="' + count + '">' +
+        '<select class="sp-control sp-control-sm sp-rule-job" name="rule_job">' +
+        jobOptions.map(function (o) {
+          return '<option value="' + o.code + '"' + (o.code === job ? " selected" : "") + '>' + o.label + '</option>';
+        }).join("") +
+        '</select><span>award</span>' +
+        '<input class="sp-control sp-control-sm sp-rule-bonus" type="number" name="rule_bonus" min="0" step="10" value="' + bonus + '">' +
+        '<span>pts</span>' +
+        '<button type="button" class="btn-sp-secondary sp-btn-sm sp-rule-remove" aria-label="Remove rule">&times;</button>';
+      return row;
+    }
+
+    document.getElementById("spAddRule").addEventListener("click", function () {
+      rulesBox.appendChild(ruleRow(5, jobOptions[0].code, 100));
+      render();
+    });
+    rulesBox.addEventListener("click", function (e) {
+      if (e.target.closest(".sp-rule-remove")) {
+        e.target.closest(".sp-rule-row").remove();
+        render();
+      }
+    });
+
+    function readRules() {
+      return Array.prototype.slice.call(rulesBox.querySelectorAll(".sp-rule-row")).map(function (row) {
+        return {
+          count: Number(row.querySelector(".sp-rule-count").value) || 0,
+          job: row.querySelector(".sp-rule-job").value,
+          bonus: Number(row.querySelector(".sp-rule-bonus").value) || 0
+        };
+      });
+    }
+
+    function checkedJobs() {
+      return Array.prototype.slice
+        .call(document.querySelectorAll('#spJobTypes input:checked'))
+        .map(function (i) { return i.value; });
+    }
+
+    /* Estimated cost = participants x total rule bonus points x POINT_VALUE_USD */
+    function estimatedCost(participants, rules) {
+      var bonusPoints = rules.reduce(function (sum, r) { return sum + r.bonus; }, 0);
+      return Math.round(participants * bonusPoints * RATE);
+    }
+
+    var name = document.getElementById("spName");
+    var desc = document.getElementById("spDesc");
+    var start = document.getElementById("spStart");
+    var end = document.getElementById("spEnd");
+    var scope = document.getElementById("spScope");
+    var participants = document.getElementById("spParticipants");
+    var budget = document.getElementById("spBudget");
+    var metric = document.getElementById("spMetric");
+    var target = document.getElementById("spTarget");
+    var budgetTouched = false;
+    budget.addEventListener("input", function () { budgetTouched = true; });
+
+    function render() {
+      var rules = readRules();
+      var jobs = checkedJobs();
+      var people = Number(participants.value) || 0;
+      var suggested = estimatedCost(people, rules);
+
+      document.getElementById("spBudgetHint").textContent =
+        "Suggested from rules: $" + suggested.toLocaleString();
+      if (!budgetTouched) budget.value = suggested;
+
+      document.getElementById("pvName").textContent = name.value || "Untitled program";
+      document.getElementById("pvDesc").textContent = desc.value || "";
+      document.getElementById("pvDates").textContent =
+        (start.value && end.value) ? start.value + " → " + end.value : "Dates not set";
+      document.getElementById("pvScope").textContent = scope.options[scope.selectedIndex].text;
+      document.getElementById("pvJobs").textContent = jobs.length ? jobs.length + " selected" : "None selected";
+      document.getElementById("pvRules").textContent = rules.length
+        ? rules.map(function (r) { return r.count + " × " + r.job.replace(/_/g, " ") + " → " + r.bonus + " pts"; }).join("; ")
+        : "None";
+      document.getElementById("pvParticipants").textContent = people;
+      document.getElementById("pvBudget").textContent = "$" + (Number(budget.value) || 0).toLocaleString();
+      document.getElementById("pvMetric").textContent =
+        metric.value ? metric.options[metric.selectedIndex].text + " → " + (target.value || 0) : "—";
+
+      /* Step pips reflect completeness */
+      var done = {
+        1: !!(name.value.trim() && start.value && end.value),
+        2: rules.length > 0 && jobs.length > 0,
+        3: people > 0 && !!metric.value
+      };
+      document.querySelectorAll(".sp-step-pip").forEach(function (pip) {
+        pip.classList.toggle("is-done", !!done[pip.dataset.step]);
+      });
+      return done;
+    }
+
+    form.addEventListener("input", render);
+    form.addEventListener("change", render);
+
+    /* End date must follow start date. */
+    function validDates() {
+      var bad = start.value && end.value && end.value < start.value;
+      var node = document.getElementById("spEndError");
+      node.textContent = bad ? "The end date must fall after the start date." : "";
+      node.hidden = !bad;
+      end.classList.toggle("is-invalid", bad);
+      return !bad;
+    }
+    end.addEventListener("change", validDates);
+    start.addEventListener("change", validDates);
+
+    document.getElementById("spSaveDraftBtn").addEventListener("click", function () {
+      document.getElementById("spProgramAction").value = "draft";
+    });
+    document.getElementById("spSubmitBtn").addEventListener("click", function () {
+      document.getElementById("spProgramAction").value = "submit";
+    });
+
+    form.addEventListener("submit", function (e) {
+      if (!validDates()) { e.preventDefault(); end.focus(); return; }
+      if (document.getElementById("spProgramAction").value !== "submit") return;
+
+      var done = render();
+      var missing = [];
+      if (!done[1]) missing.push("Basics — name and both dates");
+      if (!done[2]) missing.push("Rules — at least one job type and one bonus rule");
+      if (!done[3]) missing.push("Budget & target — participants and a success metric");
+      var box = document.getElementById("spIncomplete");
+      var list = document.getElementById("spMissing");
+      if (missing.length) {
+        e.preventDefault();
+        list.innerHTML = "";
+        missing.forEach(function (m) {
+          var li = document.createElement("li");
+          li.textContent = m;
+          list.appendChild(li);
+        });
+        box.hidden = false;
+        box.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        box.hidden = true;
+      }
+    });
+
+    render();
+  })();
+
+  {% if saved %}SP.toast("Program saved as draft.");{% endif %}
+  {% if submitted %}SP.toast("Submitted to {{ current_user.manager_name }} for approval.");{% endif %}
+</script>
+{% endblock %}

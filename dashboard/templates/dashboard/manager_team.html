@@ -1,0 +1,474 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Team — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    <header class="sp-page-header">
+      <div>
+        <h1>Good to see you, {{ current_user.first_name }}.</h1>
+        <p class="sp-muted sp-small mb-0 mt-1">
+          {{ current_user.team }} &middot; {{ stats.team_size }} technicians &middot; {{ current_user.warehouse }}
+        </p>
+      </div>
+      <p class="sp-muted sp-small mb-0 ms-auto text-lg-end">{% now "l, F j, Y" %}</p>
+    </header>
+
+    {# ---- KPI row ---- #}
+    <div class="row g-3 mt-1">
+      <div class="col-6 col-lg-2">
+        <div class="sp-card sp-kpi">
+          <p class="sp-kpi-label">Team points</p>
+          <p class="sp-kpi-value mb-2" data-count="{{ stats.points }}">0</p>
+          <p class="sp-delta sp-delta-{% if stats.points_delta >= 0 %}up{% else %}down{% endif %} mb-0">{{ stats.points_delta }}%</p>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="sp-card sp-kpi">
+          <p class="sp-kpi-label">Avg repeat rate</p>
+          <p class="sp-kpi-value mb-2"><span data-count="{{ stats.repeat_rate }}" data-count-decimals="1">0</span><span class="sp-kpi-unit">%</span></p>
+          <p class="sp-delta sp-delta-{% if stats.repeat_delta >= 0 %}up{% else %}down{% endif %} mb-0">{{ stats.repeat_delta }}%</p>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="sp-card sp-kpi">
+          <p class="sp-kpi-label">Avg on-time</p>
+          <p class="sp-kpi-value mb-2"><span data-count="{{ stats.on_time_rate }}" data-count-decimals="1">0</span><span class="sp-kpi-unit">%</span></p>
+          <p class="sp-delta sp-delta-{% if stats.on_time_delta >= 0 %}up{% else %}down{% endif %} mb-0">{{ stats.on_time_delta }}%</p>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="sp-card sp-kpi">
+          <p class="sp-kpi-label">Jobs this week</p>
+          <p class="sp-kpi-value mb-2" data-count="{{ stats.jobs_this_week }}">0</p>
+          <p class="sp-delta sp-delta-{% if stats.jobs_delta >= 0 %}up{% else %}down{% endif %} mb-0">{{ stats.jobs_delta }}%</p>
+        </div>
+      </div>
+      <div class="col-6 col-lg-2">
+        <a class="sp-card sp-kpi sp-kpi-link" href="{% url 'dashboard:manager_approvals' %}">
+          <p class="sp-kpi-label">Pending approvals</p>
+          <p class="sp-kpi-value mb-2" data-count="{{ stats.pending }}">0</p>
+          <p class="sp-delta mb-0">Review queue &rarr;</p>
+        </a>
+      </div>
+      <div class="col-6 col-lg-2">
+        <div class="sp-card sp-kpi">
+          <p class="sp-kpi-label">Team avg CSAT</p>
+          <p class="sp-kpi-value mb-2"><span data-count="{{ stats.csat }}" data-count-decimals="2">0</span><span class="sp-kpi-unit">/ 5</span></p>
+          <p class="sp-delta sp-delta-{% if stats.csat_delta >= 0 %}up{% else %}down{% endif %} mb-0">{{ stats.csat_delta }}%</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+      {# ---- Team trend ---- #}
+      <div class="col-lg-8">
+        <div class="sp-card p-4" id="spTrend" data-trend="{{ trend }}">
+          <h2 class="mb-1">Team points, last 12 weeks</h2>
+          <p class="sp-muted sp-small mb-3">Hover a week for its total.</p>
+          <div class="position-relative">
+            <svg class="sp-trend" viewBox="0 0 620 160" role="img"
+                 aria-label="Team points per week over twelve weeks"></svg>
+            <div class="sp-spark-tooltip" id="spTrendTip" role="status"></div>
+          </div>
+        </div>
+      </div>
+
+      {# ---- Burnout watch ---- #}
+      <div class="col-lg-4">
+        <div class="sp-card p-4 h-100">
+          <div class="sp-insights-head">
+            <svg class="sp-insights-icon sp-icon-warning" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+              <path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.5v.01"/>
+            </svg>
+            <div>
+              <h2 class="mb-0">Burnout watch</h2>
+              <p class="sp-muted sp-small mb-0">A coaching prompt, not an incident</p>
+            </div>
+          </div>
+
+          {% for signal in signals %}
+          <div class="sp-signal">
+            <span class="sp-avatar sp-avatar-sm" aria-hidden="true">{{ signal.initials }}</span>
+            <div class="sp-signal-body">
+              <p class="sp-signal-name mb-1">{{ signal.agent.name }}</p>
+              {% for trigger in signal.triggers %}
+              <p class="sp-signal-trigger mb-0">{{ trigger.text }}</p>
+              {% endfor %}
+            </div>
+            <button type="button" class="btn-sp-secondary sp-btn-sm sp-checkin"
+                    data-name="{{ signal.agent.name }}">Check in</button>
+          </div>
+          {% empty %}
+          <div class="sp-signal-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 6L9 17l-5-5"/>
+            </svg>
+            <p class="mb-0">No burnout signals this week</p>
+          </div>
+          {% endfor %}
+
+          {% if signal_total > 5 %}
+          <div id="spMoreSignals" hidden>
+            {% for signal in all_signals|slice:"5:" %}
+            <div class="sp-signal">
+              <span class="sp-avatar sp-avatar-sm" aria-hidden="true">{{ signal.initials }}</span>
+              <div class="sp-signal-body">
+                <p class="sp-signal-name mb-1">{{ signal.agent.name }}</p>
+                {% for trigger in signal.triggers %}
+                <p class="sp-signal-trigger mb-0">{{ trigger.text }}</p>
+                {% endfor %}
+              </div>
+              <button type="button" class="btn-sp-secondary sp-btn-sm sp-checkin"
+                      data-name="{{ signal.agent.name }}">Check in</button>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="sp-disclose" id="spMoreSignalsBtn" aria-expanded="false"
+                  aria-controls="spMoreSignals">View all {{ signal_total }}</button>
+          {% endif %}
+
+          <p class="sp-insights-foot mb-0">
+            Flagged when overtime passes {{ burnout_rules.overtime }} hrs in a week,
+            {{ burnout_rules.days }}+ consecutive days are logged with no gap,
+            or a repeat rate runs {{ burnout_rules.margin }} points above the team average.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {# ---- Roster ---- #}
+    <div class="sp-card mt-3" id="spRoster">
+      <div class="sp-toolbar">
+        <h2 class="mb-0">Team roster</h2>
+        <label class="visually-hidden" for="spRosterFilter">Filter technicians</label>
+        <input type="search" id="spRosterFilter" class="sp-input" placeholder="Filter by name" autocomplete="off">
+      </div>
+      <div class="sp-toolbar">
+        <div class="sp-chips" id="spRosterChips" role="group" aria-label="Filter roster">
+          {% for tier in tiers %}
+          <button type="button" class="sp-chip" data-filter="tier" data-value="{{ tier.slug }}" aria-pressed="false">{{ tier.name }}</button>
+          {% endfor %}
+          <button type="button" class="sp-chip" data-filter="flag" data-value="1" aria-pressed="false">Needs attention</button>
+          <button type="button" class="sp-chip" data-filter="pending" data-value="1" aria-pressed="false">Pending approvals</button>
+          <button type="button" class="sp-chip" data-filter="overtime" data-value="1" aria-pressed="false">Overtime</button>
+        </div>
+        <p class="sp-muted sp-small mb-0 ms-auto" id="spRosterCount" role="status">Showing {{ roster|length }} of {{ roster|length }}</p>
+      </div>
+
+      <div class="sp-table-wrap">
+        <table class="sp-table" id="spRosterTable">
+          <thead>
+            <tr>
+              <th scope="col" data-key="name"><button type="button" class="sp-sort">Agent <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="tier"><button type="button" class="sp-sort">Tier <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="points" class="sp-num"><button type="button" class="sp-sort sp-sort-num">Points <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="jobs" class="sp-num"><button type="button" class="sp-sort sp-sort-num">Jobs <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="repeat"><button type="button" class="sp-sort">Repeat <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="ontime"><button type="button" class="sp-sort">On-time <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="csat" class="sp-num"><button type="button" class="sp-sort sp-sort-num">CSAT <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="overtime" class="sp-num"><button type="button" class="sp-sort sp-sort-num">Overtime <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="pending"><button type="button" class="sp-sort">Status <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+            </tr>
+          </thead>
+          <tbody id="spRosterBody">
+            {% for row in roster %}
+            <tr class="sp-row" role="button" tabindex="0" aria-expanded="false" aria-controls="rd-{{ row.id }}"
+                data-name="{{ row.name }}" data-tier="{{ row.tier.min_points }}" data-tierslug="{{ row.tier.slug }}"
+                data-points="{{ row.points }}" data-jobs="{{ row.jobs_this_week }}"
+                data-repeat="{{ row.repeat_rate }}" data-ontime="{{ row.on_time_rate }}"
+                data-csat="{{ row.csat }}" data-overtime="{{ row.overtime_hours_this_week }}"
+                data-pending="{{ row.pending }}" data-flag="{% if row.flagged %}1{% else %}0{% endif %}"
+                data-ot-flag="{% if row.over_overtime %}1{% else %}0{% endif %}">
+              <td>{{ row.name }}</td>
+              <td><span class="sp-tier sp-tier-{{ row.tier.slug }}">{{ row.tier.name }}</span></td>
+              <td class="sp-num">{{ row.points }}</td>
+              <td class="sp-num">{{ row.jobs_this_week }}</td>
+              <td><span class="sp-databar"><span class="sp-databar-fill" style="width: {{ row.repeat_pct }}%"></span><span class="sp-databar-text">{{ row.repeat_rate }}%</span></span></td>
+              <td><span class="sp-databar"><span class="sp-databar-fill" style="width: {{ row.on_time_pct }}%"></span><span class="sp-databar-text">{{ row.on_time_rate }}%</span></span></td>
+              <td class="sp-num">{{ row.csat }}</td>
+              <td class="sp-num {% if row.over_overtime %}sp-overtime-high{% endif %}">{{ row.overtime_hours_this_week }}</td>
+              <td>{% if row.pending %}<span class="sp-status sp-status-submitted">{{ row.pending }} pending</span>{% else %}<span class="sp-muted sp-small">—</span>{% endif %}</td>
+            </tr>
+            <tr class="sp-detail-row" id="rd-{{ row.id }}">
+              <td colspan="9">
+                <div class="sp-detail-inner">
+                  <div class="sp-detail-body sp-roster-detail">
+                    <div>
+                      <h3 class="mb-2">Last five jobs</h3>
+                      <ul class="sp-people">
+                        {% for entry in row.recent %}
+                        <li><span>{{ entry.job_label }}</span><span>{{ entry.points }} pts &middot; {{ entry.status_label }}</span></li>
+                        {% empty %}
+                        <li><span class="sp-muted">No logged jobs yet</span></li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+                    <div>
+                      <h3 class="mb-2">8-week trend</h3>
+                      <svg class="sp-spark sp-agent-spark" data-agent="{{ row.id }}" viewBox="0 0 200 50"
+                           preserveAspectRatio="none" role="img" aria-label="Weekly points for {{ row.name }}"></svg>
+                      <div class="d-flex gap-2 mt-3">
+                        <a class="btn-sp-secondary sp-btn-sm" href="{% url 'dashboard:manager_team' %}#spRoster">View profile</a>
+                        <a class="btn-sp-primary sp-btn-sm" href="{% url 'dashboard:manager_approvals' %}">Review submissions</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+            <tr class="sp-empty-row" id="spRosterEmpty" hidden><td colspan="9">No technicians match</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Check-in note modal #}
+<div class="sp-modal-scrim" id="spCheckinScrim" hidden>
+  <div class="sp-modal" role="dialog" aria-modal="true" aria-labelledby="spCheckinTitle">
+    <h2 id="spCheckinTitle">Check in with <span id="spCheckinName"></span></h2>
+    <p class="sp-muted sp-small mt-1">A private note to yourself before your next one-to-one.</p>
+    <label class="sp-label mt-3" for="spCheckinNote">Note</label>
+    <textarea class="sp-control" id="spCheckinNote" rows="3" placeholder="What do you want to raise?"></textarea>
+    <div class="sp-modal-actions">
+      <button type="button" class="btn-sp-secondary" id="spCheckinCancel">Cancel</button>
+      <button type="button" class="btn-sp-primary" id="spCheckinSave">Save note</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Manager team dashboard: trend chart, roster table, burnout check-ins. */
+  (function () {
+    var DATA = JSON.parse(document.getElementById("spTrend").dataset.trend);
+
+    /* --- 12-week trend, drawn from the data attribute --- */
+    function drawLine(svg, values, width, height, pad) {
+      var low = Math.min.apply(null, values), high = Math.max.apply(null, values);
+      var span = (high - low) || 1;
+      var step = (width - pad * 2) / (values.length - 1);
+      var plot = height - pad * 2;
+      return values.map(function (v, i) {
+        return {
+          x: +(pad + i * step).toFixed(1),
+          y: +(height - pad - (v - low) / span * plot).toFixed(1),
+          value: v, week: i + 1
+        };
+      });
+    }
+
+    var trendSvg = document.querySelector(".sp-trend");
+    var tip = document.getElementById("spTrendTip");
+    var points = drawLine(trendSvg, DATA.weeks, 620, 160, 16);
+    var ns = "http://www.w3.org/2000/svg";
+
+    var path = document.createElementNS(ns, "polyline");
+    path.setAttribute("class", "sp-spark-line");
+    path.setAttribute("points", points.map(function (p) { return p.x + "," + p.y; }).join(" "));
+    trendSvg.appendChild(path);
+
+    points.forEach(function (p) {
+      var g = document.createElementNS(ns, "g");
+      g.setAttribute("class", "sp-spark-point");
+      g.setAttribute("tabindex", "0");
+      var dot = document.createElementNS(ns, "circle");
+      dot.setAttribute("class", "sp-spark-dot");
+      dot.setAttribute("cx", p.x); dot.setAttribute("cy", p.y); dot.setAttribute("r", "3");
+      var hit = document.createElementNS(ns, "circle");
+      hit.setAttribute("class", "sp-spark-hit");
+      hit.setAttribute("cx", p.x); hit.setAttribute("cy", p.y); hit.setAttribute("r", "16");
+      g.appendChild(dot); g.appendChild(hit);
+      function show() {
+        g.classList.add("is-active");
+        tip.textContent = "Week " + p.week + ": " + p.value.toLocaleString() + " pts";
+        tip.style.left = (p.x / 620 * 100) + "%";
+        tip.style.top = (p.y / 160 * 100) + "%";
+        tip.classList.add("is-visible");
+      }
+      function hide() { g.classList.remove("is-active"); tip.classList.remove("is-visible"); }
+      g.addEventListener("mouseenter", show); g.addEventListener("mouseleave", hide);
+      g.addEventListener("focus", show); g.addEventListener("blur", hide);
+      trendSvg.appendChild(g);
+    });
+
+    /* --- per-agent sparklines in the expanded rows --- */
+    document.querySelectorAll(".sp-agent-spark").forEach(function (svg) {
+      var values = DATA.sparks[svg.dataset.agent];
+      if (!values) return;
+      var pts = drawLine(svg, values, 200, 50, 6);
+      var line = document.createElementNS(ns, "polyline");
+      line.setAttribute("class", "sp-spark-line");
+      line.setAttribute("points", pts.map(function (p) { return p.x + "," + p.y; }).join(" "));
+      svg.appendChild(line);
+    });
+
+    /* --- roster table: sort, filter, expand --- */
+    var table = document.getElementById("spRosterTable");
+    var body = document.getElementById("spRosterBody");
+    var empty = document.getElementById("spRosterEmpty");
+    var count = document.getElementById("spRosterCount");
+    var search = document.getElementById("spRosterFilter");
+    var chips = document.getElementById("spRosterChips");
+
+    var pairs = Array.prototype.slice.call(body.querySelectorAll(".sp-row")).map(function (row) {
+      return { row: row, detail: row.nextElementSibling };
+    });
+    var total = pairs.length;
+    var sortKey = "points", sortAsc = false, openDetail = null;
+
+    function value(row, key) {
+      var raw = row.dataset[key];
+      return key === "name" || key === "tierslug" ? (raw || "").toLowerCase() : Number(raw);
+    }
+
+    function applySort() {
+      pairs.sort(function (a, b) {
+        var x = value(a.row, sortKey), y = value(b.row, sortKey);
+        if (x === y) return value(a.row, "points") - value(b.row, "points");
+        return (x > y ? 1 : -1) * (sortAsc ? 1 : -1);
+      });
+      pairs.forEach(function (p) { body.append(p.row, p.detail); });
+      body.append(empty);
+    }
+
+    function activeChips(filter) {
+      return Array.prototype.slice
+        .call(chips.querySelectorAll('[data-filter="' + filter + '"][aria-pressed="true"]'))
+        .map(function (c) { return c.dataset.value; });
+    }
+
+    function applyFilter() {
+      var term = search.value.trim().toLowerCase();
+      var tiers = activeChips("tier");
+      var wantFlag = activeChips("flag").length > 0;
+      var wantPending = activeChips("pending").length > 0;
+      var wantOvertime = activeChips("overtime").length > 0;
+      var shown = 0;
+
+      pairs.forEach(function (pair) {
+        var d = pair.row.dataset;
+        var ok = (!term || d.name.toLowerCase().indexOf(term) > -1)
+          && (!tiers.length || tiers.indexOf(d.tierslug) > -1)
+          && (!wantFlag || d.flag === "1")
+          && (!wantPending || Number(d.pending) > 0)
+          && (!wantOvertime || d.otFlag === "1");
+        pair.row.hidden = !ok;
+        pair.detail.hidden = !ok;
+        if (!ok && pair.detail === openDetail) closeDetail();
+        if (ok) shown++;
+      });
+      empty.hidden = shown > 0 || total === 0;
+      count.textContent = "Showing " + shown + " of " + total;
+    }
+
+    function refresh(sorted) {
+      body.style.opacity = ".35";
+      setTimeout(function () {
+        if (sorted) applySort();
+        applyFilter();
+        body.style.opacity = "1";
+      }, 120);
+    }
+
+    table.querySelectorAll("th[data-key]").forEach(function (th) {
+      th.querySelector(".sp-sort").addEventListener("click", function () {
+        var key = th.dataset.key === "tier" ? "tier" : th.dataset.key;
+        sortAsc = key === sortKey ? !sortAsc : true;
+        sortKey = key;
+        table.querySelectorAll("th[data-key]").forEach(function (o) { o.removeAttribute("aria-sort"); });
+        th.setAttribute("aria-sort", sortAsc ? "ascending" : "descending");
+        refresh(true);
+      });
+    });
+
+    var debounce;
+    search.addEventListener("input", function () {
+      clearTimeout(debounce);
+      debounce = setTimeout(applyFilter, 120);
+    });
+    chips.addEventListener("click", function (e) {
+      var chip = e.target.closest(".sp-chip");
+      if (!chip) return;
+      chip.setAttribute("aria-pressed", chip.getAttribute("aria-pressed") === "true" ? "false" : "true");
+      applyFilter();
+    });
+
+    function closeDetail() {
+      if (!openDetail) return;
+      openDetail.classList.remove("is-open");
+      openDetail.previousElementSibling.setAttribute("aria-expanded", "false");
+      openDetail = null;
+    }
+    function toggleDetail(row) {
+      var detail = row.nextElementSibling;
+      if (detail === openDetail) { closeDetail(); return; }
+      closeDetail();
+      detail.classList.add("is-open");
+      row.setAttribute("aria-expanded", "true");
+      openDetail = detail;
+    }
+    pairs.forEach(function (pair) {
+      pair.row.addEventListener("click", function () { toggleDetail(pair.row); });
+      pair.row.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleDetail(pair.row); }
+      });
+    });
+
+    /* --- burnout: view all + check-in note --- */
+    var moreBtn = document.getElementById("spMoreSignalsBtn");
+    if (moreBtn) {
+      moreBtn.addEventListener("click", function () {
+        var box = document.getElementById("spMoreSignals");
+        var open = moreBtn.getAttribute("aria-expanded") === "true";
+        box.hidden = open;
+        moreBtn.setAttribute("aria-expanded", String(!open));
+        moreBtn.textContent = open ? "View all {{ signal_total }}" : "Show fewer";
+      });
+    }
+
+    var scrim = document.getElementById("spCheckinScrim");
+    var nameOut = document.getElementById("spCheckinName");
+    var noteBox = document.getElementById("spCheckinNote");
+    var lastTrigger = null;
+    function openCheckin(name, trigger) {
+      lastTrigger = trigger;
+      nameOut.textContent = name;
+      noteBox.value = "";
+      scrim.hidden = false;
+      requestAnimationFrame(function () { scrim.classList.add("is-open"); });
+      noteBox.focus();
+    }
+    function closeCheckin() {
+      scrim.classList.remove("is-open");
+      setTimeout(function () { scrim.hidden = true; }, 180);
+      if (lastTrigger) lastTrigger.focus();
+    }
+    document.addEventListener("click", function (e) {
+      var button = e.target.closest(".sp-checkin");
+      if (button) openCheckin(button.dataset.name, button);
+    });
+    document.getElementById("spCheckinCancel").addEventListener("click", closeCheckin);
+    document.getElementById("spCheckinSave").addEventListener("click", function () {
+      var name = nameOut.textContent;
+      closeCheckin();
+      SP.toast("Check-in note saved for " + name + ".");
+    });
+    scrim.addEventListener("click", function (e) { if (e.target === scrim) closeCheckin(); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !scrim.hidden) closeCheckin();
+    });
+
+    applySort();
+    applyFilter();
+  })();
+</script>
+{% endblock %}

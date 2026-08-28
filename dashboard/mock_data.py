@@ -352,6 +352,60 @@ def points_to_usd(points):
     return round(points * POINT_VALUE_USD, 2)
 
 
+
+# ---------------------------------------------------------------------------
+# Manager workspace reference data
+# ---------------------------------------------------------------------------
+# Team totals for the previous month, so KPI deltas are derived rather than
+# invented at render time.
+TEAM_PREVIOUS = {
+    "points": 39_200,
+    "repeat_rate": 9.4,
+    "on_time_rate": 86.1,
+    "jobs_this_week": 168,
+    "csat": 4.05,
+}
+
+# 12 weeks of team totals for the trend chart.
+TEAM_WEEKLY_POINTS = [
+    3120, 3380, 2960, 3540, 3810, 3290,
+    3670, 3950, 3420, 3780, 4090, 3860,
+]
+
+# Burnout thresholds — stated here so the UI can explain itself accurately.
+BURNOUT_OVERTIME_HOURS = 10
+BURNOUT_CONSECUTIVE_DAYS = 3
+BURNOUT_REPEAT_RATE_MARGIN = 8
+
+SUCCESS_METRICS = [
+    {"code": "reduce_repeat", "label": "Reduce repeat rate", "unit": "%"},
+    {"code": "increase_attach", "label": "Increase premium attach", "unit": "%"},
+    {"code": "improve_on_time", "label": "Improve on-time arrival", "unit": "%"},
+    {"code": "raise_csat", "label": "Raise CSAT", "unit": "/ 5"},
+]
+
+SUCCESS_METRICS_BY_CODE = {m["code"]: m for m in SUCCESS_METRICS}
+
+PROGRAM_SCOPES = [
+    {"code": "team", "label": "My team"},
+    {"code": "region", "label": "Whole region"},
+]
+
+
+def agent_weekly_points(agent, weeks=8):
+    """A deterministic 8-week series for one agent, derived from their totals.
+
+    Not stored data — the shape is generated from the agent's own id and point
+    total so every view shows the same series without another seed table.
+    """
+    average = max(agent["points"] // max(weeks, 1), 1)
+    spread = [-18, 9, -6, 14, 22, -11, 5, 17]
+    return [
+        max(int(average * (100 + spread[(agent["id"] + i) % len(spread)]) / 100), 0)
+        for i in range(weeks)
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Notification preferences, keyed by role so the template loops one list.
 # ---------------------------------------------------------------------------
@@ -520,6 +574,13 @@ if __name__ == "__main__":
     assert calculate_points("nonsense", []) == 0
     assert calculate_points("service_repair", ["nonsense"]) == 80
     assert calculate_points("service_repair", None) == 80
+    # Manager reference data
+    assert len(TEAM_WEEKLY_POINTS) == 12
+    assert len(SUCCESS_METRICS) == 4
+    series = agent_weekly_points(get_agent(417))
+    assert len(series) == 8 and all(p > 0 for p in series)
+    assert agent_weekly_points(get_agent(417)) == series, "deterministic"
+
     # Ledger
     assert points_to_usd(1000) == 180.0
     assert POINT_VALUE_USD == 0.18

@@ -1,0 +1,379 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Approvals — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    <header class="sp-page-header">
+      <div>
+        <h1>Approvals</h1>
+        <p class="sp-muted sp-small mb-0 mt-1" id="spQueueCount">
+          {{ queue_count }} submission{{ queue_count|pluralize }} awaiting review
+        </p>
+      </div>
+      <p class="sp-muted sp-small mb-0 ms-auto text-lg-end">{{ reviewed_today }} reviewed today</p>
+    </header>
+
+    <div class="sp-review-grid mt-3">
+
+      {# ---------- LIST PANE ---------- #}
+      <div class="sp-review-list">
+        <div class="sp-card">
+          <div class="sp-toolbar">
+            <label class="visually-hidden" for="spSort">Sort submissions</label>
+            <form method="get" class="w-100">
+              <select class="sp-control sp-control-sm" id="spSort" name="sort" onchange="this.form.submit()">
+                <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+                <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+                <option value="points" {% if sort == 'points' %}selected{% endif %}>Highest points</option>
+                <option value="agent" {% if sort == 'agent' %}selected{% endif %}>Agent name</option>
+              </select>
+            </form>
+          </div>
+          <div class="sp-toolbar">
+            <div class="sp-chips" id="spQueueChips" role="group" aria-label="Filter queue">
+              <button type="button" class="sp-chip" data-value="all" aria-pressed="true">All</button>
+              <button type="button" class="sp-chip" data-value="awaiting" aria-pressed="false">Awaiting review</button>
+              <button type="button" class="sp-chip" data-value="stale" aria-pressed="false">Over 48 hrs</button>
+            </div>
+          </div>
+
+          <ul class="sp-queue" id="spQueue">
+            {% for group in groups %}
+            <li class="sp-queue-item {% if selected and group.key == selected.key %}is-selected{% endif %}"
+                data-stale="{% if group.stale %}1{% else %}0{% endif %}">
+              <a href="?g={{ group.key }}&sort={{ sort }}">
+                <span class="sp-avatar sp-avatar-sm" aria-hidden="true">{{ group.initials }}</span>
+                <span class="sp-queue-body">
+                  <span class="sp-queue-name">{{ group.agent_name }}</span>
+                  <span class="sp-queue-meta">
+                    {{ group.date }} &middot; {{ group.entries|length }} entr{{ group.entries|length|pluralize:"y,ies" }}
+                    &middot; {{ group.points }} pts
+                  </span>
+                  <span class="sp-queue-age {% if group.stale %}is-stale{% endif %}">{{ group.age_label }}</span>
+                </span>
+              </a>
+            </li>
+            {% empty %}
+            <li class="sp-queue-empty">Nothing awaiting review</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+
+      {# ---------- DETAIL PANE ---------- #}
+      <div class="sp-review-detail">
+        {% if selected %}
+        <form method="post" id="spReviewForm">
+          {% csrf_token %}
+          <input type="hidden" name="agent_name" value="{{ selected.agent_name }}">
+
+          <div class="sp-card p-4">
+            <div class="sp-review-head">
+              <div>
+                <h2 class="mb-1">{{ selected.agent_name }}</h2>
+                <p class="sp-muted sp-small mb-0">
+                  {{ selected.date }} &middot; {{ selected.entries|length }} entr{{ selected.entries|length|pluralize:"y,ies" }}
+                  &middot; {{ selected.points }} points
+                </p>
+              </div>
+              <p class="sp-review-age {% if selected.stale %}is-stale{% endif %} mb-0 ms-auto">{{ selected.age_label }}</p>
+            </div>
+
+            <div class="sp-review-bulk">
+              <button type="button" class="btn-sp-secondary sp-btn-sm" id="spApproveAll">Approve all</button>
+            </div>
+
+            {% for entry in selected.entries %}
+            <div class="sp-review-entry" data-entry="{{ entry.id }}">
+              <div class="sp-entry-top">
+                <div>
+                  <p class="sp-entry-title">{{ entry.job.label }}</p>
+                  <p class="sp-entry-meta">
+                    {{ entry.work_order_ref }} &middot; {{ entry.address_line }} &middot; {{ entry.duration_minutes }} min
+                  </p>
+                </div>
+                <div class="sp-entry-points">
+                  <p class="sp-entry-points-value mb-0">{{ entry.points }}</p>
+                </div>
+              </div>
+
+              {% if entry.modifier_details %}
+              <div class="sp-entry-chips">
+                {% for mod in entry.modifier_details %}
+                <span class="sp-mod-body {% if mod.material %}sp-mod-material{% endif %}"
+                      title="{{ mod.description }}">{{ mod.label }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
+
+              {% if entry.notes %}<p class="sp-muted sp-small mt-2 mb-0">{{ entry.notes }}</p>{% endif %}
+
+              <div class="sp-decide" role="group" aria-label="Decision for {{ entry.work_order_ref }}">
+                <input type="hidden" name="decision_{{ entry.id }}" value="" id="dec-{{ entry.id }}">
+                <button type="button" class="sp-decide-btn" data-entry="{{ entry.id }}" data-status="approved">Approve</button>
+                <button type="button" class="sp-decide-btn" data-entry="{{ entry.id }}" data-status="changes_requested">Request changes</button>
+                <button type="button" class="sp-decide-btn" data-entry="{{ entry.id }}" data-status="rejected">Reject</button>
+              </div>
+
+              <div class="sp-note-wrap" id="note-wrap-{{ entry.id }}" hidden>
+                <label class="sp-label" for="note-{{ entry.id }}">Reason <span class="sp-required">required</span></label>
+                <textarea class="sp-control sp-control-sm" id="note-{{ entry.id }}"
+                          name="note_{{ entry.id }}" rows="2"
+                          placeholder="Tell them exactly what to change."></textarea>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <div class="sp-submitbar sp-review-footer" id="spReviewBar">
+            <span class="sp-submitbar-text" id="spDecisionSummary">No decisions yet</span>
+            <button type="submit" class="btn-sp-primary" id="spSubmitReview" disabled>Submit review</button>
+          </div>
+        </form>
+        {% else %}
+        <div class="sp-card sp-empty-card">
+          <h2 class="mb-2">Nothing awaiting review</h2>
+          <p class="sp-muted mb-0">{{ reviewed_today }} submission{{ reviewed_today|pluralize }} reviewed today.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ---------- HISTORY ---------- #}
+    <div class="sp-card p-4 mt-3">
+      <button type="button" class="sp-disclose" id="spHistoryToggle" aria-expanded="false" aria-controls="spHistory">
+        Decisions you've made ({{ history|length }})
+      </button>
+      <div class="sp-disclose-body" id="spHistory">
+        <div class="sp-disclose-inner">
+          <table class="sp-table">
+            <tbody>
+              {% for entry in history %}
+              <tr>
+                <td>{{ entry.agent_name }}</td>
+                <td class="sp-muted">{{ entry.job_label }}</td>
+                <td class="sp-num">{{ entry.points }}</td>
+                <td><span class="sp-status sp-status-{{ entry.status }}">{{ entry.status_label }}</span></td>
+                <td class="sp-muted">{{ entry.reviewed_at }}</td>
+                <td>
+                  {% if entry.reopenable %}
+                  <button type="button" class="btn-sp-secondary sp-btn-sm sp-reopen" data-entry="{{ entry.id }}">Reopen</button>
+                  {% else %}
+                  <span class="sp-muted sp-small">Closed</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td class="sp-muted">No decisions yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Approve-all confirmation #}
+<div class="sp-modal-scrim" id="spBulkScrim" hidden>
+  <div class="sp-modal" role="dialog" aria-modal="true" aria-labelledby="spBulkTitle">
+    <h2 id="spBulkTitle">Approve all entries?</h2>
+    <p class="sp-muted sp-small mt-1" id="spBulkSummary"></p>
+    <div class="sp-modal-actions">
+      <button type="button" class="btn-sp-secondary" id="spBulkCancel">Cancel</button>
+      <button type="button" class="btn-sp-primary" id="spBulkConfirm">Approve all</button>
+    </div>
+  </div>
+</div>
+
+{# Reopen note #}
+<div class="sp-modal-scrim" id="spReopenScrim" hidden>
+  <div class="sp-modal" role="dialog" aria-modal="true" aria-labelledby="spReopenTitle">
+    <h2 id="spReopenTitle">Reopen this entry?</h2>
+    <p class="sp-muted sp-small mt-1">It goes back to the agent as "changes requested".</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="reopen">
+      <input type="hidden" name="entry_id" id="spReopenId">
+      <label class="sp-label mt-3" for="spReopenNote">Reason <span class="sp-required">required</span></label>
+      <textarea class="sp-control" id="spReopenNote" name="note" rows="3" required></textarea>
+      <div class="sp-modal-actions">
+        <button type="button" class="btn-sp-secondary" id="spReopenCancel">Cancel</button>
+        <button type="submit" class="btn-sp-primary" id="spReopenConfirm" disabled>Reopen</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Approvals. A rejection or change request without a note is refused here
+     and again in store.review_batch — an unexplained decision is exactly the
+     opacity this portal exists to remove. */
+  (function () {
+    var form = document.getElementById("spReviewForm");
+
+    /* --- queue filter chips --- */
+    var chips = document.getElementById("spQueueChips");
+    if (chips) {
+      chips.addEventListener("click", function (e) {
+        var chip = e.target.closest(".sp-chip");
+        if (!chip) return;
+        chips.querySelectorAll(".sp-chip").forEach(function (c) {
+          c.setAttribute("aria-pressed", String(c === chip));
+        });
+        var mode = chip.dataset.value;
+        document.querySelectorAll("#spQueue .sp-queue-item").forEach(function (item) {
+          item.hidden = mode === "stale" && item.dataset.stale !== "1";
+        });
+      });
+    }
+
+    /* --- history disclosure --- */
+    var histToggle = document.getElementById("spHistoryToggle");
+    var hist = document.getElementById("spHistory");
+    histToggle.addEventListener("click", function () {
+      var open = histToggle.getAttribute("aria-expanded") === "true";
+      histToggle.setAttribute("aria-expanded", String(!open));
+      hist.style.height = open ? "0px" : hist.scrollHeight + "px";
+    });
+
+    /* --- reopen --- */
+    var reopenScrim = document.getElementById("spReopenScrim");
+    var reopenNote = document.getElementById("spReopenNote");
+    var reopenConfirm = document.getElementById("spReopenConfirm");
+    document.querySelectorAll(".sp-reopen").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.getElementById("spReopenId").value = button.dataset.entry;
+        reopenNote.value = "";
+        reopenConfirm.disabled = true;
+        reopenScrim.hidden = false;
+        requestAnimationFrame(function () { reopenScrim.classList.add("is-open"); });
+        reopenNote.focus();
+      });
+    });
+    reopenNote.addEventListener("input", function () {
+      reopenConfirm.disabled = !reopenNote.value.trim();
+    });
+    function closeReopen() {
+      reopenScrim.classList.remove("is-open");
+      setTimeout(function () { reopenScrim.hidden = true; }, 180);
+    }
+    document.getElementById("spReopenCancel").addEventListener("click", closeReopen);
+    reopenScrim.addEventListener("click", function (e) { if (e.target === reopenScrim) closeReopen(); });
+
+    if (!form) return;
+
+    /* --- per-entry decisions --- */
+    var summary = document.getElementById("spDecisionSummary");
+    var submit = document.getElementById("spSubmitReview");
+
+    function noteRequired(status) {
+      return status === "rejected" || status === "changes_requested";
+    }
+
+    function refresh() {
+      var counts = { approved: 0, rejected: 0, changes_requested: 0 };
+      var blocked = false, any = false;
+
+      form.querySelectorAll(".sp-review-entry").forEach(function (row) {
+        var id = row.dataset.entry;
+        var status = document.getElementById("dec-" + id).value;
+        var note = document.getElementById("note-" + id);
+        if (!status) return;
+        any = true;
+        counts[status] = (counts[status] || 0) + 1;
+        if (noteRequired(status) && !note.value.trim()) blocked = true;
+      });
+
+      var parts = [];
+      if (counts.approved) parts.push(counts.approved + " approve");
+      if (counts.changes_requested) parts.push(counts.changes_requested + " changes");
+      if (counts.rejected) parts.push(counts.rejected + " reject");
+      summary.textContent = any
+        ? parts.join(" · ") + (blocked ? " — a reason is required" : "")
+        : "No decisions yet";
+      submit.disabled = !any || blocked;
+    }
+
+    form.addEventListener("click", function (e) {
+      var button = e.target.closest(".sp-decide-btn");
+      if (!button) return;
+      var id = button.dataset.entry;
+      var field = document.getElementById("dec-" + id);
+      var row = button.closest(".sp-review-entry");
+      var wrap = document.getElementById("note-wrap-" + id);
+      var status = button.dataset.status;
+
+      /* Clicking the active choice clears it. */
+      var next = field.value === status ? "" : status;
+      field.value = next;
+
+      row.querySelectorAll(".sp-decide-btn").forEach(function (b) {
+        b.classList.toggle("is-chosen", b.dataset.status === next);
+      });
+      row.className = "sp-review-entry" + (next ? " is-" + next : "");
+      wrap.hidden = !noteRequired(next);
+      if (noteRequired(next)) document.getElementById("note-" + id).focus();
+      refresh();
+    });
+
+    form.addEventListener("input", function (e) {
+      if (e.target.tagName === "TEXTAREA") refresh();
+    });
+
+    /* --- approve all --- */
+    var bulkScrim = document.getElementById("spBulkScrim");
+    var approveAll = document.getElementById("spApproveAll");
+    if (approveAll) {
+      approveAll.addEventListener("click", function () {
+        var rows = form.querySelectorAll(".sp-review-entry");
+        var points = 0;
+        rows.forEach(function (row) {
+          points += Number(row.querySelector(".sp-entry-points-value").textContent) || 0;
+        });
+        document.getElementById("spBulkSummary").textContent =
+          rows.length + " entries · " + points + " points to {{ selected.agent_name }}.";
+        bulkScrim.hidden = false;
+        requestAnimationFrame(function () { bulkScrim.classList.add("is-open"); });
+        document.getElementById("spBulkCancel").focus();
+      });
+      function closeBulk() {
+        bulkScrim.classList.remove("is-open");
+        setTimeout(function () { bulkScrim.hidden = true; }, 180);
+      }
+      document.getElementById("spBulkCancel").addEventListener("click", closeBulk);
+      bulkScrim.addEventListener("click", function (e) { if (e.target === bulkScrim) closeBulk(); });
+      document.getElementById("spBulkConfirm").addEventListener("click", function () {
+        form.querySelectorAll(".sp-review-entry").forEach(function (row) {
+          var id = row.dataset.entry;
+          document.getElementById("dec-" + id).value = "approved";
+          row.className = "sp-review-entry is-approved";
+          row.querySelectorAll(".sp-decide-btn").forEach(function (b) {
+            b.classList.toggle("is-chosen", b.dataset.status === "approved");
+          });
+          document.getElementById("note-wrap-" + id).hidden = true;
+        });
+        closeBulk();
+        refresh();
+      });
+    }
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      if (!bulkScrim.hidden) bulkScrim.classList.remove("is-open"), setTimeout(function () { bulkScrim.hidden = true; }, 180);
+      if (!reopenScrim.hidden) closeReopen();
+    });
+
+    refresh();
+  })();
+
+  {% if done %}SP.toast("Review submitted — {{ who }} notified.");{% endif %}
+  {% if refused %}SP.toast("{{ refused }} decision(s) needed a reason and were not applied.");{% endif %}
+  {% if reopened %}SP.toast("Entry reopened for changes.");{% endif %}
+</script>
+{% endblock %}

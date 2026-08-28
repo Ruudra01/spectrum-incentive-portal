@@ -47,6 +47,7 @@ STATUS_LABELS = {
 STATUS_PENDING = STATUS_SUBMITTED
 
 PROGRAM_DRAFT = "draft"
+PROGRAM_CHANGES = "changes_requested"
 PROGRAM_PENDING = "pending"
 PROGRAM_APPROVED = "approved"
 PROGRAM_REJECTED = "rejected"
@@ -102,6 +103,64 @@ def _entry(counter, agent_id, agent_name, on_date, job_type, modifiers, minutes,
         "reviewer_id": 884 if decided else None,
         "review_note": review_note,
     }
+
+
+
+def _program(pid, name, description, created_by, owner_name, team, status,
+             start, end, job_types, rules, budget, participants,
+             metric, target, scope="team", note="", reviewed_by=None, reviewed_at=None):
+    return {
+        "id": pid, "name": name, "description": description,
+        "created_by": created_by, "owner_name": owner_name,
+        "created_at": start, "status": status,
+        "start_date": start, "end_date": end,
+        "target_scope": scope, "target_team": team,
+        "job_types": list(job_types),
+        "bonus_structure": [dict(r) for r in rules],
+        "budget_estimate": budget,
+        "expected_participants": participants,
+        "success_metric": metric, "success_target": target,
+        "director_note": note, "reviewed_by": reviewed_by, "reviewed_at": reviewed_at,
+    }
+
+
+def _seed_programs():
+    """Four programs across the statuses, so the director's Part 4 comparison
+    view has real material to work with."""
+    return [
+        _program(1, "Q4 Upsell Accelerator",
+                 "Double down on mobile line attachments through the Q4 push.",
+                 884, "Marcus Vale", "Columbus North", PROGRAM_PENDING,
+                 "2026-10-01", "2026-12-31",
+                 ["new_install_residential", "upgrade_premium_router"],
+                 [{"count": 5, "job_type": "new_install_residential", "bonus": 250}],
+                 45000, 18, "increase_attach", 12),
+        _program(2, "Safety Streak Bonus",
+                 "Reward six consecutive clean safety audits.",
+                 885, "Deirdre Kwan", "Cleveland East", PROGRAM_PENDING,
+                 "2026-09-01", "2026-11-30",
+                 ["aerial_line_work", "underground_drop"],
+                 [{"count": 6, "job_type": "aerial_line_work", "bonus": 300}],
+                 18000, 24, "improve_on_time", 4),
+        _program(3, "Summer Install Sprint",
+                 "Seasonal multiplier on completed residential installs.",
+                 884, "Marcus Vale", "Columbus North", PROGRAM_APPROVED,
+                 "2026-06-01", "2026-08-31",
+                 ["new_install_residential", "new_install_commercial"],
+                 [{"count": 10, "job_type": "new_install_residential", "bonus": 400}],
+                 32000, 18, "reduce_repeat", 3,
+                 note="Approved at full budget.",
+                 reviewed_by="Priya Raghunathan", reviewed_at="2026-05-14 16:20"),
+        _program(4, "Weekend Coverage Pilot",
+                 "Premium points for Saturday appointment slots.",
+                 886, "Hollis Barrera", "Toledo West", PROGRAM_REJECTED,
+                 "2026-07-01", "2026-09-30",
+                 ["service_repair", "signal_troubleshoot"],
+                 [{"count": 4, "job_type": "service_repair", "bonus": 180}],
+                 26000, 21, "raise_csat", 4,
+                 note="Overlaps the install sprint; resubmit for Q1.",
+                 reviewed_by="Priya Raghunathan", reviewed_at="2026-06-05 11:00"),
+    ]
 
 
 def _seed_work_logs():
@@ -180,37 +239,7 @@ def _seed():
     """The state a fresh process (or a reset) starts from."""
     return {
         "work_logs": _seed_work_logs(),
-        "programs": [
-            {"id": 1, "name": "Q4 Upsell Accelerator", "owner_id": 884,
-             "owner_name": "Marcus Vale", "team": "Columbus North",
-             "budget": 45000, "multiplier": 1.5, "starts": "2026-10-01",
-             "ends": "2026-12-31", "status": PROGRAM_PENDING,
-             "summary": "Double points on mobile line attachments through Q4.",
-             "submitted_at": "2026-08-20 11:30", "decided_by": None,
-             "decided_at": None, "decision_note": ""},
-            {"id": 2, "name": "Safety Streak Bonus", "owner_id": 885,
-             "owner_name": "Deirdre Kwan", "team": "Cleveland East",
-             "budget": 18000, "multiplier": 1.25, "starts": "2026-09-01",
-             "ends": "2026-11-30", "status": PROGRAM_PENDING,
-             "summary": "Bonus points for six consecutive clean safety audits.",
-             "submitted_at": "2026-08-22 14:05", "decided_by": None,
-             "decided_at": None, "decision_note": ""},
-            {"id": 3, "name": "Summer Install Sprint", "owner_id": 884,
-             "owner_name": "Marcus Vale", "team": "Columbus North",
-             "budget": 32000, "multiplier": 1.25, "starts": "2026-06-01",
-             "ends": "2026-08-31", "status": PROGRAM_APPROVED,
-             "summary": "Seasonal multiplier on completed installs.",
-             "submitted_at": "2026-05-12 09:40", "decided_by": "Priya Raghunathan",
-             "decided_at": "2026-05-14 16:20", "decision_note": "Approved at full budget."},
-            {"id": 4, "name": "Weekend Coverage Pilot", "owner_id": 886,
-             "owner_name": "Hollis Barrera", "team": "Toledo West",
-             "budget": 26000, "multiplier": 1.5, "starts": "2026-07-01",
-             "ends": "2026-09-30", "status": PROGRAM_REJECTED,
-             "summary": "Premium points for Saturday appointment slots.",
-             "submitted_at": "2026-06-02 10:15", "decided_by": "Priya Raghunathan",
-             "decided_at": "2026-06-05 11:00",
-             "decision_note": "Overlaps the install sprint; resubmit for Q1."},
-        ],
+        "programs": _seed_programs(),
         "notifications": [],
     }
 
@@ -419,10 +448,11 @@ def review_entry(entry_id, status, reviewer_id, note=""):
 
 # --- Programs --------------------------------------------------------------
 def get_programs(owner_id=None, status=None):
+    """Programs, optionally by author (created_by) and status."""
     with _LOCK:
         programs = list(STORE["programs"])
         if owner_id is not None:
-            programs = [p for p in programs if p["owner_id"] == owner_id]
+            programs = [p for p in programs if p["created_by"] == owner_id]
         if status:
             programs = [p for p in programs if p["status"] == status]
         return copy.deepcopy(programs)
@@ -441,30 +471,253 @@ def count_pending_programs():
 
 def add_program(name, owner_id, owner_name, team, budget, multiplier,
                 starts, ends, summary, status=PROGRAM_PENDING):
-    with _LOCK:
-        program = {
-            "id": next(_ids["programs"]),
-            "name": name, "owner_id": owner_id, "owner_name": owner_name,
-            "team": team, "budget": budget, "multiplier": multiplier,
-            "starts": starts, "ends": ends, "status": status, "summary": summary,
-            "submitted_at": date.today().isoformat(),
-            "decided_by": None, "decided_at": None, "decision_note": "",
-        }
-        STORE["programs"].append(program)
-        return copy.deepcopy(program)
+    """Compact constructor kept for the older call sites and self-checks."""
+    return create_program(
+        owner_id, owner_name, name=name, description=summary, target_team=team,
+        budget_estimate=budget, start_date=starts, end_date=ends, status=status)
 
 
 def update_program_status(program_id, status, decided_by, decision_note=""):
-    if status not in (PROGRAM_DRAFT, PROGRAM_PENDING, PROGRAM_APPROVED, PROGRAM_REJECTED):
+    if status not in (PROGRAM_DRAFT, PROGRAM_PENDING, PROGRAM_APPROVED,
+                      PROGRAM_REJECTED, PROGRAM_CHANGES):
         raise ValueError(f"unknown program status: {status}")
     with _LOCK:
         for program in STORE["programs"]:
             if program["id"] == program_id:
                 program["status"] = status
-                program["decided_by"] = decided_by
-                program["decided_at"] = date.today().isoformat()
-                program["decision_note"] = decision_note
+                program["reviewed_by"] = decided_by
+                program["reviewed_at"] = _stamp()
+                program["director_note"] = decision_note
                 return copy.deepcopy(program)
+    return None
+
+
+# --- Manager: burnout, team stats, review batches ---------------------------
+def _consecutive_days_logged(entries, today):
+    """Longest run of consecutive days with at least one entry, ending today
+    or yesterday. A run that stopped earlier is not a current signal."""
+    days = set()
+    for entry in entries:
+        try:
+            days.add(datetime.strptime(entry["date"], "%Y-%m-%d").date())
+        except (TypeError, ValueError):
+            continue
+    if not days:
+        return 0
+    latest = max(days)
+    if (today - latest).days > 1:
+        return 0
+    run, cursor = 0, latest
+    while cursor in days:
+        run += 1
+        cursor -= timedelta(days=1)
+    return run
+
+
+def get_burnout_signals(manager_id, today=None):
+    """Agents showing strain, most severe first.
+
+    Three triggers, all stated on the page so the manager can see the rule:
+      * more than BURNOUT_OVERTIME_HOURS overtime hours this week
+      * BURNOUT_CONSECUTIVE_DAYS or more consecutive days logged with no gap
+      * a repeat rate more than BURNOUT_REPEAT_RATE_MARGIN points above the
+        team average
+    """
+    today = today or date.today()
+    reports = mock_data.reports_for_manager(manager_id)
+    if not reports:
+        return []
+
+    team_repeat = sum(a["repeat_rate"] for a in reports) / len(reports)
+    signals = []
+
+    for agent in reports:
+        entries = get_entries_for_agent(agent["id"])
+        run = _consecutive_days_logged(entries, today)
+        triggers = []
+
+        overtime = agent["overtime_hours_this_week"]
+        if overtime > mock_data.BURNOUT_OVERTIME_HOURS:
+            triggers.append({
+                "code": "overtime",
+                "text": f"{overtime} hrs overtime this week",
+                "weight": overtime - mock_data.BURNOUT_OVERTIME_HOURS,
+            })
+        if run >= mock_data.BURNOUT_CONSECUTIVE_DAYS:
+            triggers.append({
+                "code": "consecutive",
+                "text": f"{run} consecutive days logged",
+                "weight": run - mock_data.BURNOUT_CONSECUTIVE_DAYS,
+            })
+        margin = agent["repeat_rate"] - team_repeat
+        if margin > mock_data.BURNOUT_REPEAT_RATE_MARGIN:
+            triggers.append({
+                "code": "repeat",
+                "text": f"repeat rate {agent['repeat_rate']}% vs {team_repeat:.1f}% team average",
+                "weight": margin,
+            })
+
+        if triggers:
+            signals.append({
+                "agent": dict(agent),
+                "initials": "".join(part[0] for part in agent["name"].split()[:2]).upper(),
+                "triggers": triggers,
+                # Severity: how many rules fired, then by how much.
+                "severity": (len(triggers), round(sum(t["weight"] for t in triggers), 1)),
+            })
+
+    signals.sort(key=lambda s: s["severity"], reverse=True)
+    return signals
+
+
+def get_team_stats(manager_id):
+    """KPI figures for the team dashboard, with deltas against last month."""
+    reports = mock_data.reports_for_manager(manager_id)
+    if not reports:
+        return {}
+    count = len(reports)
+    previous = mock_data.TEAM_PREVIOUS
+
+    def delta(now, before):
+        if not before:
+            return 0.0
+        return round((now - before) / before * 100, 1)
+
+    points = sum(a["points"] for a in reports)
+    repeat = round(sum(a["repeat_rate"] for a in reports) / count, 1)
+    on_time = round(sum(a["on_time_rate"] for a in reports) / count, 1)
+    jobs = sum(a["jobs_this_week"] for a in reports)
+    csat = round(sum(a["csat"] for a in reports) / count, 2)
+    pending = count_submitted_for_manager(manager_id)
+
+    return {
+        "team_size": count,
+        "points": points,
+        "points_delta": delta(points, previous["points"]),
+        "repeat_rate": repeat,
+        "repeat_delta": delta(repeat, previous["repeat_rate"]),
+        "on_time_rate": on_time,
+        "on_time_delta": delta(on_time, previous["on_time_rate"]),
+        "jobs_this_week": jobs,
+        "jobs_delta": delta(jobs, previous["jobs_this_week"]),
+        "pending": pending,
+        "csat": csat,
+        "csat_delta": delta(csat, previous["csat"]),
+    }
+
+
+def review_batch(decisions, reviewer_id):
+    """Commit a set of review decisions at once.
+
+    `decisions` is [{entry_id, status, note}]. Reject and changes_requested
+    without a note are refused here, not just in the browser — a decision with
+    no reason is the opacity this portal exists to remove.
+    Returns (applied, refused).
+    """
+    applied, refused = [], []
+    for decision in decisions:
+        status = decision.get("status")
+        note = (decision.get("note") or "").strip()
+        if status in (STATUS_REJECTED, STATUS_CHANGES) and not note:
+            refused.append({"entry_id": decision.get("entry_id"), "reason": "note required"})
+            continue
+        result = review_entry(decision.get("entry_id"), status, reviewer_id, note)
+        (applied if result else refused).append(
+            result or {"entry_id": decision.get("entry_id"), "reason": "not reviewable"})
+    return applied, refused
+
+
+def get_reviewed_by(manager_id, since=None):
+    """Decisions this manager has already made, newest first."""
+    with _LOCK:
+        entries = [l for l in STORE["work_logs"]
+                   if l["reviewer_id"] == manager_id and l["reviewed_at"]]
+        if since:
+            entries = [l for l in entries if l["reviewed_at"] >= since]
+        entries.sort(key=lambda l: l["reviewed_at"], reverse=True)
+        return copy.deepcopy(entries)
+
+
+REOPEN_WINDOW_HOURS = 24
+
+
+def reopen_entry(entry_id, reviewer_id, note):
+    """Send a decided entry back to changes_requested, within 24 hours.
+
+    Requires a note for the same reason a rejection does.
+    """
+    note = (note or "").strip()
+    if not note:
+        return None
+    with _LOCK:
+        for entry in STORE["work_logs"]:
+            if entry["id"] != entry_id or entry["reviewer_id"] != reviewer_id:
+                continue
+            try:
+                decided = datetime.strptime(entry["reviewed_at"], "%Y-%m-%d %H:%M")
+            except (TypeError, ValueError):
+                return None
+            if datetime.now() - decided > timedelta(hours=REOPEN_WINDOW_HOURS):
+                return None
+            entry["status"] = STATUS_CHANGES
+            entry["review_note"] = note
+            entry["reviewed_at"] = _stamp()
+            return copy.deepcopy(entry)
+    return None
+
+
+# --- Manager: programs -----------------------------------------------------
+def get_programs_for_manager(manager_id, status=None):
+    return get_programs(owner_id=manager_id, status=status)
+
+
+def create_program(created_by, owner_name, **fields):
+    with _LOCK:
+        program = {
+            "id": next(_ids["programs"]),
+            "created_by": created_by, "owner_name": owner_name,
+            "created_at": date.today().isoformat(),
+            "status": fields.pop("status", PROGRAM_DRAFT),
+            "director_note": "", "reviewed_by": None, "reviewed_at": None,
+            "name": "", "description": "", "start_date": "", "end_date": "",
+            "target_scope": "team", "target_team": "", "job_types": [],
+            "bonus_structure": [], "budget_estimate": 0,
+            "expected_participants": 0, "success_metric": "", "success_target": 0,
+        }
+        program.update(fields)
+        STORE["programs"].append(program)
+        return copy.deepcopy(program)
+
+
+EDITABLE_PROGRAM_STATUSES = (PROGRAM_DRAFT, PROGRAM_CHANGES)
+
+
+def update_program(program_id, owner_id, **fields):
+    """Edit a program the manager owns, only while it is editable."""
+    with _LOCK:
+        for program in STORE["programs"]:
+            if program["id"] != program_id or program["created_by"] != owner_id:
+                continue
+            if program["status"] not in EDITABLE_PROGRAM_STATUSES:
+                return None
+            for key, value in fields.items():
+                if key in program and key not in ("id", "created_by", "status"):
+                    program[key] = value
+            return copy.deepcopy(program)
+    return None
+
+
+def submit_program(program_id, owner_id):
+    """Send a program up for director approval."""
+    with _LOCK:
+        for program in STORE["programs"]:
+            if program["id"] != program_id or program["created_by"] != owner_id:
+                continue
+            if program["status"] not in EDITABLE_PROGRAM_STATUSES:
+                return None
+            program["status"] = PROGRAM_PENDING
+            program["created_at"] = program["created_at"] or date.today().isoformat()
+            return copy.deepcopy(program)
     return None
 
 

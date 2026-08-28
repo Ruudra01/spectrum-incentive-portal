@@ -154,6 +154,27 @@ def _int(value, default=0):
         return default
 
 
+def _hours_since(stamp):
+    """Hours since a "YYYY-MM-DD HH:MM" stamp, or None if unparseable."""
+    from datetime import datetime
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return (datetime.now() - datetime.strptime(stamp, fmt)).total_seconds() / 3600
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _age_label(hours):
+    if hours is None:
+        return ""
+    if hours < 1:
+        return "submitted just now"
+    if hours < 24:
+        return f"submitted {int(hours)} hour{'s' if int(hours) != 1 else ''} ago"
+    return f"submitted {int(hours // 24)} day{'s' if int(hours // 24) != 1 else ''} ago"
+
+
 def _safe_next(raw):
     """Only allow a relative in-site path — never an external redirect."""
     if raw and raw.startswith("/") and not raw.startswith("//"):
@@ -432,22 +453,243 @@ def log_work(request):
 
 
 
+
+
+
+def _manager(request):
+    return mock_data.DEMO_ACCOUNTS[request.session["user_email"]]["profile"]
+
+
 @role_required(mock_data.ROLE_MANAGER)
 def manager_team(request):
-    return _placeholder(request, "Team",
-                        "Roster, per-agent drill-down and workload signals for your technicians.")
+    """Team dashboard: KPIs, burnout watch, roster and the 12-week trend."""
+    manager = _manager(request)
+    stats = store.get_team_stats(manager["id"])
+    signals = store.get_burnout_signals(manager["id"])
+    reports = mock_data.reports_for_manager(manager["id"])
+
+    pending_by_agent = {}
+    for entry in store.get_submitted_for_manager(manager["id"]):
+        pending_by_agent[entry["agent_id"]] = pending_by_agent.get(entry["agent_id"], 0) + 1
+    flagged = {s["agent"]["id"] for s in signals}
+
+    roster = []
+    for agent in reports:
+        roster.append(dict(
+            agent,
+            tier=mock_data.get_tier(agent["points"]),
+            initials="".join(w[0] for w in agent["name"].split()[:2]).upper(),
+            pending=pending_by_agent.get(agent["id"], 0),
+            flagged=agent["id"] in flagged,
+            over_overtime=agent["overtime_hours_this_week"] > mock_data.BURNOUT_OVERTIME_HOURS,
+            # Widths for the inline data bars, relative to the team average.
+            repeat_pct=min(round(agent["repeat_rate"] / max(stats["repeat_rate"], 0.1) * 50), 100),
+            on_time_pct=min(round(agent["on_time_rate"] / max(stats["on_time_rate"], 0.1) * 50), 100),
+            recent=store.get_entries_for_agent(agent["id"])[:5],
+            spark=mock_data.agent_weekly_points(agent),
+        ))
+
+    for row in roster:
+        for entry in row["recent"]:
+            entry["job_label"] = mock_data.JOB_TYPES_BY_CODE.get(
+                entry["job_type"], {}).get("label", entry["job_type"])
+            entry["status_label"] = store.STATUS_LABELS.get(entry["status"], entry["status"])
+
+    return render(request, "dashboard/manager_team.html", {
+        "stats": stats,
+        "signals": signals[:5],
+        "signal_total": len(signals),
+        "all_signals": signals,
+        "roster": roster,
+        "tiers": mock_data.TIERS,
+        "burnout_rules": {
+            "overtime": mock_data.BURNOUT_OVERTIME_HOURS,
+            "days": mock_data.BURNOUT_CONSECUTIVE_DAYS,
+            "margin": mock_data.BURNOUT_REPEAT_RATE_MARGIN,
+        },
+        "trend": json.dumps({
+            "weeks": mock_data.TEAM_WEEKLY_POINTS,
+            "sparks": {str(r["id"]): r["spark"] for r in roster},
+        }),
+    })
 
 
-@role_required(mock_data.ROLE_MANAGER)
-def manager_programs(request):
-    return _placeholder(request, "Programs",
-                        "Build incentive programs and send them up for director sign-off.")
+def _group_key(entry):
+    return f"{entry['agent_id']}:{entry['date']}"
 
 
 @role_required(mock_data.ROLE_MANAGER)
 def manager_approvals(request):
-    return _placeholder(request, "Approvals",
-                        "Review the work logs your technicians have submitted.")
+    """Two-pane review queue. Rejections and change requests need a note."""
+    manager = _manager(request)
+
+    if request.method == "POST":
+        if request.POST.get("action") == "reopen":
+            store.reopen_entry(_int(request.POST.get("entry_id")), manager["id"],
+                               request.POST.get("note", ""))
+            return redirect(f"{reverse('dashboard:manager_approvals')}?reopened=1")
+
+        decisions = []
+        for key in request.POST:
+            if not key.startswith("decision_"):
+                continue
+            entry_id = _int(key.split("_", 1)[1])
+            status = request.POST.get(key)
+            if status in (store.STATUS_APPROVED, store.STATUS_REJECTED, store.STATUS_CHANGES):
+                decisions.append({
+                    "entry_id": entry_id,
+                    "status": status,
+                    "note": request.POST.get(f"note_{entry_id}", ""),
+                })
+        applied, refused = store.review_batch(decisions, manager["id"])
+        agent_name = request.POST.get("agent_name", "the agent")
+        target = f"{reverse('dashboard:manager_approvals')}?done={len(applied)}"
+        if refused:
+            target += f"&refused={len(refused)}"
+        if applied:
+            target += f"&who={agent_name}"
+        return redirect(target)
+
+    queue = store.get_submitted_for_manager(manager["id"])
+    groups = {}
+    for entry in queue:
+        entry["job"] = mock_data.JOB_TYPES_BY_CODE.get(entry["job_type"], {})
+        entry["modifier_details"] = [
+            dict(mock_data.POINT_MODIFIERS_BY_CODE[m],
+                 material=m in ("adverse_weather", "premium_upsell", "after_hours"))
+            for m in entry["modifiers"] if m in mock_data.POINT_MODIFIERS_BY_CODE
+        ]
+        key = _group_key(entry)
+        group = groups.setdefault(key, {
+            "key": key, "agent_id": entry["agent_id"], "agent_name": entry["agent_name"],
+            "initials": "".join(w[0] for w in entry["agent_name"].split()[:2]).upper(),
+            "date": entry["date"], "submitted_at": entry["submitted_at"],
+            "entries": [], "points": 0,
+        })
+        group["entries"].append(entry)
+        group["points"] += entry["points"]
+
+    groups = list(groups.values())
+    sort = request.GET.get("sort", "oldest")
+    keys = {
+        "oldest": lambda g: (g["submitted_at"] or "", g["agent_name"]),
+        "newest": lambda g: (g["submitted_at"] or "", g["agent_name"]),
+        "points": lambda g: -g["points"],
+        "agent": lambda g: g["agent_name"],
+    }
+    groups.sort(key=keys.get(sort, keys["oldest"]), reverse=(sort == "newest"))
+
+    for group in groups:
+        group["age_hours"] = _hours_since(group["submitted_at"])
+        group["stale"] = group["age_hours"] is not None and group["age_hours"] > 48
+        group["age_label"] = _age_label(group["age_hours"])
+
+    selected_key = request.GET.get("g") or (groups[0]["key"] if groups else None)
+    selected = next((g for g in groups if g["key"] == selected_key), None)
+
+    today = date.today().isoformat()
+    history = store.get_reviewed_by(manager["id"])
+    for entry in history:
+        entry["job_label"] = mock_data.JOB_TYPES_BY_CODE.get(
+            entry["job_type"], {}).get("label", entry["job_type"])
+        entry["status_label"] = store.STATUS_LABELS.get(entry["status"], entry["status"])
+        entry["reopenable"] = (_hours_since(entry["reviewed_at"]) or 999) <= store.REOPEN_WINDOW_HOURS
+
+    return render(request, "dashboard/manager_approvals.html", {
+        "groups": groups,
+        "selected": selected,
+        "sort": sort,
+        "queue_count": len(queue),
+        "history": history[:20],
+        "reviewed_today": sum(1 for e in history if (e["reviewed_at"] or "").startswith(today)),
+        "done": _int(request.GET.get("done")),
+        "refused": _int(request.GET.get("refused")),
+        "who": request.GET.get("who", ""),
+        "reopened": request.GET.get("reopened") == "1",
+    })
+
+
+@role_required(mock_data.ROLE_MANAGER)
+def manager_programs(request):
+    """List and author incentive programs."""
+    manager = _manager(request)
+
+    if request.method == "POST":
+        rules = []
+        for count, job, bonus in zip(request.POST.getlist("rule_count"),
+                                     request.POST.getlist("rule_job"),
+                                     request.POST.getlist("rule_bonus")):
+            if job in mock_data.JOB_TYPES_BY_CODE and _int(count) > 0:
+                rules.append({"count": _int(count), "job_type": job, "bonus": _int(bonus)})
+
+        fields = {
+            "name": (request.POST.get("name") or "").strip()[:120],
+            "description": (request.POST.get("description") or "").strip()[:600],
+            "start_date": (request.POST.get("start_date") or "")[:10],
+            "end_date": (request.POST.get("end_date") or "")[:10],
+            "target_scope": request.POST.get("target_scope", "team"),
+            "target_team": manager["team"],
+            "job_types": [j for j in request.POST.getlist("job_types")
+                          if j in mock_data.JOB_TYPES_BY_CODE],
+            "bonus_structure": rules,
+            "expected_participants": _int(request.POST.get("expected_participants")),
+            "budget_estimate": _int(request.POST.get("budget_estimate")),
+            "success_metric": request.POST.get("success_metric", ""),
+            "success_target": _int(request.POST.get("success_target")),
+        }
+        # End must follow start; refuse rather than store an impossible range.
+        if fields["end_date"] and fields["start_date"] and fields["end_date"] < fields["start_date"]:
+            return redirect(f"{reverse('dashboard:manager_programs')}?error=dates")
+
+        program_id = _int(request.POST.get("program_id"))
+        if program_id:
+            store.update_program(program_id, manager["id"], **fields)
+        else:
+            program = store.create_program(manager["id"], manager["name"], **fields)
+            program_id = program["id"]
+
+        if request.POST.get("action") == "submit":
+            store.submit_program(program_id, manager["id"])
+            return redirect(f"{reverse('dashboard:manager_programs')}?submitted=1")
+        return redirect(f"{reverse('dashboard:manager_programs')}?saved=1")
+
+    programs = store.get_programs_for_manager(manager["id"])
+    today = date.today().isoformat()
+    for program in programs:
+        program["metric_label"] = mock_data.SUCCESS_METRICS_BY_CODE.get(
+            program["success_metric"], {}).get("label", "—")
+        if program["status"] == store.PROGRAM_APPROVED:
+            if program["start_date"] > today:
+                program["phase"] = "Scheduled"
+            elif program["end_date"] < today:
+                program["phase"] = "Ended"
+            else:
+                program["phase"] = "Active"
+        else:
+            program["phase"] = ""
+
+    editing = None
+    edit_id = _int(request.GET.get("edit"))
+    if edit_id:
+        candidate = store.get_program(edit_id)
+        if candidate and candidate["created_by"] == manager["id"]:
+            editing = candidate
+
+    return render(request, "dashboard/manager_programs.html", {
+        "programs": programs,
+        "editing": editing,
+        "creating": request.GET.get("new") == "1" or editing is not None,
+        "job_types": mock_data.JOB_TYPES,
+        "job_groups": [{"name": g, "jobs": [j for j in mock_data.JOB_TYPES if j["group"] == g]}
+                       for g in mock_data.JOB_TYPE_GROUPS],
+        "metrics": mock_data.SUCCESS_METRICS,
+        "scopes": mock_data.PROGRAM_SCOPES,
+        "point_value": mock_data.POINT_VALUE_USD,
+        "editable_statuses": list(store.EDITABLE_PROGRAM_STATUSES),
+        "saved": request.GET.get("saved") == "1",
+        "submitted": request.GET.get("submitted") == "1",
+        "date_error": request.GET.get("error") == "dates",
+    })
 
 
 @role_required(mock_data.ROLE_DIRECTOR)
