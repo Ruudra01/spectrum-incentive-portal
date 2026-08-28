@@ -5,8 +5,8 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from . import chat_responses, mock_data
-from .decorators import agent_required
+from . import chat_responses, mock_data, store
+from .decorators import agent_required, path_allowed, role_required, role_home_url
 
 
 def _progress(points):
@@ -125,22 +125,29 @@ def _safe_next(raw):
 
 
 def login(request):
-    """Session-only sign in against the demo credentials. No auth app."""
+    """Session-only sign in against DEMO_ACCOUNTS. No auth app, no user model."""
     if request.session.get("is_authenticated"):
-        return redirect("dashboard:dashboard")
+        return redirect(role_home_url(request.session.get("role")))
 
     error = None
     email = ""
     if request.method == "POST":
         email = (request.POST.get("email") or "").strip()
         password = request.POST.get("password") or ""
-        if (
-            email.lower() == mock_data.DEMO_EMAIL.lower()
-            and password == mock_data.DEMO_PASSWORD
-        ):
+        account = mock_data.DEMO_ACCOUNTS.get(email.lower())
+
+        if account and password == account["password"]:
+            role = account["role"]
             request.session["is_authenticated"] = True
-            request.session["agent_name"] = mock_data.CURRENT_AGENT["name"]
-            return redirect(_safe_next(request.POST.get("next")) or reverse("dashboard:dashboard"))
+            request.session["user_email"] = account["profile"]["email"]
+            request.session["role"] = role
+            request.session["display_name"] = account["profile"]["name"]
+
+            # Honour ?next= only when it is in-site AND open to this role.
+            requested = request.POST.get("next")
+            target = requested if path_allowed(requested, role) else role_home_url(role)
+            return redirect(target)
+
         # Deliberately non-specific: never reveal which field was wrong.
         error = "The email or password you entered is incorrect."
 
@@ -150,9 +157,19 @@ def login(request):
         {
             "error": error,
             "email": email,
-            "next": _safe_next(request.GET.get("next") or request.POST.get("next")) or "",
-            "demo_email": mock_data.DEMO_EMAIL,
-            "demo_password": mock_data.DEMO_PASSWORD,
+            "next": request.GET.get("next") or request.POST.get("next") or "",
+            "demo_accounts": [
+                {
+                    "email": account_email,
+                    "password": account["password"],
+                    "role": account["role"],
+                    "role_label": mock_data.ROLE_LABELS[account["role"]],
+                    "name": account["profile"]["name"],
+                    "initials": account["profile"]["initials"],
+                    "job_title": account["profile"]["job_title"],
+                }
+                for account_email, account in mock_data.DEMO_ACCOUNTS.items()
+            ],
             "hide_nav": True,
         },
     )
@@ -166,33 +183,55 @@ def logout(request):
     return redirect(f"{reverse('dashboard:landing')}?signed_out=1")
 
 
-@agent_required
+@role_required()
 def profile(request):
-    """Account profile. Only phone and location are editable; the edits live
-    in the session so they persist without a database."""
+    """Account profile. Shared identity header plus a role-specific block.
+    Only phone and location are editable; the edits live in the session."""
     if request.method == "POST":
         request.session["profile_phone"] = (request.POST.get("phone") or "").strip()
         request.session["profile_location"] = (request.POST.get("location") or "").strip()
         return redirect(f"{reverse('dashboard:profile')}?saved=1")
 
-    points = mock_data.PROFILE_DATA["points"]
-    return render(
-        request,
-        "dashboard/profile.html",
-        {
-            "tier": mock_data.get_tier(points),
-            "next_tier": _progress(points),
-            "saved": request.GET.get("saved") == "1",
-        },
-    )
+    role = request.session.get("role")
+    context = {"saved": request.GET.get("saved") == "1"}
+
+    if role == mock_data.ROLE_AGENT:
+        points = mock_data.AGENT_PROFILE["points"]
+        context["tier"] = mock_data.get_tier(points)
+        context["next_tier"] = _progress(points)
+
+    elif role == mock_data.ROLE_MANAGER:
+        reports = mock_data.reports_for_manager(mock_data.MANAGER_PROFILE["id"])
+        by_tier = {t["slug"]: 0 for t in mock_data.TIERS}
+        for agent in reports:
+            by_tier[mock_data.get_tier(agent["points"])["slug"]] += 1
+        total_points = sum(a["points"] for a in reports)
+        by_tenure = sorted(reports, key=lambda a: a["tenure_months"], reverse=True)
+        context.update({
+            "reports": reports,
+            "team_points": total_points,
+            "team_average_tier": mock_data.get_tier(round(total_points / len(reports))),
+            "tier_counts": [
+                {"tier": tier, "count": by_tier[tier["slug"]]} for tier in mock_data.TIERS
+            ],
+            "longest_tenured": by_tenure[:3],
+            "newest": by_tenure[-3:][::-1],
+        })
+
+    elif role == mock_data.ROLE_DIRECTOR:
+        budget = mock_data.DIRECTOR_PROFILE["annual_budget"]
+        context["budget_display"] = f"${budget / 1_000_000:.1f}M"
+
+    return render(request, "dashboard/profile.html", context)
 
 
 def _prefs_from_session(request):
     """Merge stored overrides onto the mock defaults so a fresh session still
     renders a sensible state."""
+    role = request.session.get("role", mock_data.ROLE_AGENT)
     stored = request.session.get("notification_prefs", {})
     groups = []
-    for group in mock_data.NOTIFICATION_PREFS:
+    for group in mock_data.NOTIFICATION_PREFS[role]:
         items = []
         for item in group["items"]:
             saved = stored.get(item["key"], {})
@@ -205,7 +244,7 @@ def _prefs_from_session(request):
     return groups
 
 
-@agent_required
+@role_required()
 def notification_settings(request):
     """Autosaving notification preferences, stored in the session."""
     if request.method == "POST":
@@ -225,7 +264,10 @@ def notification_settings(request):
         else:
             key = payload.get("key")
             channel = payload.get("channel")
-            valid_keys = {i["key"] for g in mock_data.NOTIFICATION_PREFS for i in g["items"]}
+            role = request.session.get("role", mock_data.ROLE_AGENT)
+            valid_keys = {
+                i["key"] for g in mock_data.NOTIFICATION_PREFS[role] for i in g["items"]
+            }
             if key not in valid_keys or channel not in ("email", "push"):
                 return JsonResponse({"error": "Unknown preference."}, status=400)
             entry = dict(stored.get(key, {}))
@@ -245,3 +287,56 @@ def notification_settings(request):
             "mute_all": request.session.get("mute_all", mock_data.MUTE_ALL_DEFAULT),
         },
     )
+
+
+def _placeholder(request, title, blurb):
+    return render(request, "dashboard/placeholder.html", {"title": title, "blurb": blurb})
+
+
+@role_required(mock_data.ROLE_AGENT)
+def log_work(request):
+    return _placeholder(request, "Log Work",
+                        "Submit jobs, hours and points for your manager to approve.")
+
+
+@role_required(mock_data.ROLE_MANAGER)
+def manager_team(request):
+    return _placeholder(request, "Team",
+                        "Roster, per-agent drill-down and workload signals for your technicians.")
+
+
+@role_required(mock_data.ROLE_MANAGER)
+def manager_programs(request):
+    return _placeholder(request, "Programs",
+                        "Build incentive programs and send them up for director sign-off.")
+
+
+@role_required(mock_data.ROLE_MANAGER)
+def manager_approvals(request):
+    return _placeholder(request, "Approvals",
+                        "Review the work logs your technicians have submitted.")
+
+
+@role_required(mock_data.ROLE_DIRECTOR)
+def director_overview(request):
+    return _placeholder(request, "Overview",
+                        "Territory rollups across every manager, team and warehouse.")
+
+
+@role_required(mock_data.ROLE_DIRECTOR)
+def director_programs(request):
+    return _placeholder(request, "Programs",
+                        "Every incentive program in the territory, with spend against budget.")
+
+
+@role_required(mock_data.ROLE_DIRECTOR)
+def director_approvals(request):
+    return _placeholder(request, "Approvals",
+                        "Programs awaiting your approval.")
+
+
+@require_POST
+def dev_reset_store(request):
+    """Restore the in-memory store to its seed state so a demo restarts clean."""
+    store.reset_store()
+    return JsonResponse({"ok": True, "detail": "Store reset to seed state."})

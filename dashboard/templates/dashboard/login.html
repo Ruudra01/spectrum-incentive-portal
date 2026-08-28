@@ -62,8 +62,25 @@
 
     <div class="sp-demo-box">
       <p class="sp-demo-label">Demo access</p>
-      <p class="sp-demo-line mb-0">{{ demo_email }}</p>
-      <p class="sp-demo-line mb-0">{{ demo_password }}</p>
+      <p class="sp-muted sp-small mb-3">Pick a role to fill the form, or type your own.</p>
+
+      <div class="sp-role-picker" role="radiogroup" aria-label="Demo account">
+        {% for account in demo_accounts %}
+        <label class="sp-role-card">
+          <input type="radio" name="demo-role" value="{{ account.role }}"
+                 data-email="{{ account.email }}" data-password="{{ account.password }}"
+                 aria-label="Sign in as {{ account.name }}, {{ account.role_label }}">
+          <span class="sp-role-card-body">
+            <span class="sp-role-avatar" aria-hidden="true">{{ account.initials }}</span>
+            <span>
+              <span class="sp-role-name d-block">{{ account.name }}</span>
+              <span class="sp-role-title d-block">{{ account.role_label }}</span>
+            </span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+      <p class="sp-demo-line mb-0">Password for all three: {{ demo_accounts.0.password }}</p>
     </div>
 
   </div>
@@ -132,6 +149,22 @@
     password.addEventListener("blur", validatePassword);
     email.addEventListener("input", function () { if (emailError.hidden === false) validateEmail(); });
     password.addEventListener("input", function () { if (passwordError.hidden === false) validatePassword(); });
+
+    /* Role picker fills the form; typing by hand clears the selection. */
+    var picker = document.querySelectorAll('input[name="demo-role"]');
+    picker.forEach(function (radio) {
+      radio.addEventListener("change", function () {
+        email.value = radio.dataset.email;
+        password.value = radio.dataset.password;
+        setError(email, emailError, null);
+        setError(password, passwordError, null);
+      });
+    });
+    function clearPicker() {
+      picker.forEach(function (radio) { radio.checked = false; });
+    }
+    email.addEventListener("input", clearPicker);
+    password.addEventListener("input", clearPicker);
 
     form.addEventListener("submit", function (e) {
       var ok = validateEmail() & validatePassword();

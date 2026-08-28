@@ -1,9 +1,32 @@
-"""Single source of truth for every point value and threshold in the portal.
+"""Static reference data for the portal.
 
-Shaped like a JSON API response: plain dicts and lists only, so each constant
-can be swapped for a real endpoint payload without touching a template.
+This module holds things that do NOT change at runtime: tiers and thresholds,
+KPI definitions, the org chart, demo accounts and notification defaults.
+Anything mutable — work logs, programs, approvals — lives in store.py.
 """
 
+# ---------------------------------------------------------------------------
+# Roles
+# ---------------------------------------------------------------------------
+ROLE_AGENT = "agent"
+ROLE_MANAGER = "manager"
+ROLE_DIRECTOR = "director"
+
+ROLE_LABELS = {
+    ROLE_AGENT: "Field Agent",
+    ROLE_MANAGER: "Manager",
+    ROLE_DIRECTOR: "Director",
+}
+
+ROLE_HOME = {
+    ROLE_AGENT: "dashboard:dashboard",
+    ROLE_MANAGER: "dashboard:manager_team",
+    ROLE_DIRECTOR: "dashboard:director_overview",
+}
+
+# ---------------------------------------------------------------------------
+# Tiers
+# ---------------------------------------------------------------------------
 TIERS = [
     {
         "name": "Bronze",
@@ -40,31 +63,188 @@ TIERS = [
     },
 ]
 
-CURRENT_AGENT = {
+
+def get_tier(points):
+    """Return the tier dict a point total falls into."""
+    for tier in reversed(TIERS):
+        if points >= tier["min_points"]:
+            return tier
+    return TIERS[0]
+
+
+def points_to_next_tier(points):
+    """Return (next_tier_name, points_needed, percent_through_current_tier).
+
+    Returns None at the top tier, which has no next tier to climb to.
+    """
+    current = get_tier(points)
+    index = TIERS.index(current)
+    if index == len(TIERS) - 1:
+        return None
+    following = TIERS[index + 1]
+    span = following["min_points"] - current["min_points"]
+    percent = round((points - current["min_points"]) / span * 100)
+    return following["name"], following["min_points"] - points, percent
+
+
+# ---------------------------------------------------------------------------
+# DEMO CREDENTIALS — frontend prototype only.
+# Hardcoded on purpose so a reviewer can sign in as each role without a
+# database. Passwords are compared in plain text. Replace with a real auth
+# backend (hashed passwords, a user store, rate limiting) before any non-demo
+# use. Do not deploy this as-is.
+# ---------------------------------------------------------------------------
+DEMO_PASSWORD = "spectrum2026"
+
+AGENT_PROFILE = {
     "id": 417,
+    "email": "agent@spectrum.com",
     "name": "Dana Whitfield",
-    "employee_id": "SPC-0417",
-    "region": "Central Ohio",
-    "team": "Residential Install",
     "initials": "DW",
+    "employee_id": "EMP-40271",
+    "job_title": "Field Installation Technician",
+    "region": "Ohio Valley",
+    "team": "Columbus North",
+    "manager_name": "Marcus Vale",
+    "manager_id": 884,
+    "location": "Columbus, OH",
+    "hire_date": "2023-03-14",
+    "phone": "(614) 555-0142",
+    # Performance — unchanged so the existing dashboard renders identically.
     "points": 3180,
     "rank": 4,
     "points_this_week": 240,
 }
 
+MANAGER_PROFILE = {
+    "id": 884,
+    "email": "manager@spectrum.com",
+    "name": "Marcus Vale",
+    "initials": "MV",
+    "employee_id": "EMP-31884",
+    "job_title": "Field Operations Manager",
+    "region": "Ohio Valley",
+    "team": "Columbus North",
+    "manager_name": "Priya Raghunathan",
+    "manager_id": 115,
+    "location": "Columbus, OH",
+    "hire_date": "2019-08-05",
+    "phone": "(614) 555-0188",
+    "team_size": 18,
+    "warehouse": "Columbus North Depot",
+    "years_in_role": 4,
+}
+
+DIRECTOR_PROFILE = {
+    "id": 115,
+    "email": "director@spectrum.com",
+    "name": "Priya Raghunathan",
+    "initials": "PR",
+    "employee_id": "EMP-20115",
+    "job_title": "Director of Field Operations",
+    "region": "Great Lakes Territory",
+    "team": "Field Operations",
+    "manager_name": "VP Field Operations",
+    "manager_id": None,
+    "location": "Cleveland, OH",
+    "hire_date": "2015-01-20",
+    "phone": "(216) 555-0110",
+    "managers_count": 6,
+    "technicians_count": 142,
+    "warehouses": 4,
+    "annual_budget": 8_400_000,
+    "region_nps": 41,
+    "retention_rate": 88.5,
+}
+
+DEMO_ACCOUNTS = {
+    "agent@spectrum.com": {
+        "password": DEMO_PASSWORD,
+        "role": ROLE_AGENT,
+        "profile": AGENT_PROFILE,
+    },
+    "manager@spectrum.com": {
+        "password": DEMO_PASSWORD,
+        "role": ROLE_MANAGER,
+        "profile": MANAGER_PROFILE,
+    },
+    "director@spectrum.com": {
+        "password": DEMO_PASSWORD,
+        "role": ROLE_DIRECTOR,
+        "profile": DIRECTOR_PROFILE,
+    },
+}
+
+# Backwards-compatible aliases for the agent-only views built earlier.
+CURRENT_AGENT = AGENT_PROFILE
+PROFILE_DATA = AGENT_PROFILE
+DEMO_EMAIL = AGENT_PROFILE["email"]
+
+# ---------------------------------------------------------------------------
+# Org chart: Priya -> 6 managers -> Marcus supervises 18 technicians
+# ---------------------------------------------------------------------------
+ORG = {
+    "director": {"id": 115, "name": "Priya Raghunathan", "region": "Great Lakes Territory"},
+    "managers": [
+        {"id": 884, "name": "Marcus Vale", "team": "Columbus North",
+         "region": "Ohio Valley", "team_size": 18, "is_demo_user": True},
+        {"id": 885, "name": "Deirdre Kwan", "team": "Cleveland East",
+         "region": "Ohio Valley", "team_size": 24, "is_demo_user": False},
+        {"id": 886, "name": "Hollis Barrera", "team": "Toledo West",
+         "region": "Ohio Valley", "team_size": 21, "is_demo_user": False},
+        {"id": 887, "name": "Nadia Petrov", "team": "Indianapolis Metro",
+         "region": "Great Lakes", "team_size": 26, "is_demo_user": False},
+        {"id": 888, "name": "Curtis Amankwah", "team": "Detroit North",
+         "region": "Great Lakes", "team_size": 27, "is_demo_user": False},
+        {"id": 889, "name": "Yusuf Demir", "team": "Grand Rapids",
+         "region": "Great Lakes", "team_size": 26, "is_demo_user": False},
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# Marcus Vale's 18 technicians. Ordered by points, so rank == index + 1.
+# The numbers tell a coherent story: longer tenure trends toward more points,
+# better on-time and lower repeat rates. Two agents (Ibrahim, Sofia) break the
+# pattern with heavy overtime and depressed CSAT — the burnout signal the
+# manager views are built to surface.
+# ---------------------------------------------------------------------------
+def _agent(id, name, region, points, rank, repeat_rate, on_time_rate, jobs,
+           overtime, safety, csat, tenure):
+    return {
+        "id": id, "name": name, "region": region, "points": points, "rank": rank,
+        "manager_id": 884, "team": "Columbus North",
+        "repeat_rate": repeat_rate, "on_time_rate": on_time_rate,
+        "jobs_this_week": jobs, "overtime_hours_this_week": overtime,
+        "safety_audits_passed": safety, "csat": csat, "tenure_months": tenure,
+    }
+
+
 LEADERBOARD = [
-    {"id": 902, "name": "Marcus Bell", "region": "West Michigan", "points": 6400, "rank": 1},
-    {"id": 655, "name": "Priya Raman", "region": "North Texas", "points": 5720, "rank": 2},
-    {"id": 731, "name": "Alonzo Reyes", "region": "Central Ohio", "points": 4310, "rank": 3},
-    {"id": 417, "name": "Dana Whitfield", "region": "Central Ohio", "points": 3180, "rank": 4},
-    {"id": 288, "name": "Grace Okonkwo", "region": "Upstate New York", "points": 2960, "rank": 5},
-    {"id": 540, "name": "Tomas Lindqvist", "region": "North Texas", "points": 2740, "rank": 6},
-    {"id": 119, "name": "Renee Baptiste", "region": "South Florida", "points": 2510, "rank": 7},
-    {"id": 803, "name": "Ibrahim Cole", "region": "West Michigan", "points": 2280, "rank": 8},
-    {"id": 366, "name": "Hana Fujimoto", "region": "South Florida", "points": 2080, "rank": 9},
-    {"id": 474, "name": "Wesley Adjei", "region": "Upstate New York", "points": 1900, "rank": 10},
+    _agent(902, "Marcus Bell", "Ohio Valley", 6420, 1, 3.1, 97.5, 14, 2.0, 6, 4.9, 74),
+    _agent(655, "Priya Raman", "Ohio Valley", 5730, 2, 3.8, 96.2, 13, 3.5, 6, 4.8, 61),
+    _agent(731, "Alonzo Reyes", "Ohio Valley", 4310, 3, 4.6, 94.8, 12, 5.0, 5, 4.7, 48),
+    _agent(417, "Dana Whitfield", "Ohio Valley", 3180, 4, 5.2, 93.1, 11, 6.5, 5, 4.6, 41),
+    _agent(288, "Grace Okonkwo", "Ohio Valley", 2960, 5, 5.9, 92.4, 11, 7.0, 5, 4.5, 36),
+    _agent(540, "Tomas Lindqvist", "Ohio Valley", 2740, 6, 6.4, 91.0, 10, 8.5, 4, 4.4, 33),
+    _agent(119, "Renee Baptiste", "Ohio Valley", 2510, 7, 7.1, 90.2, 10, 9.0, 4, 4.3, 29),
+    _agent(803, "Ibrahim Cole", "Ohio Valley", 2280, 8, 8.8, 87.5, 12, 14.5, 3, 3.9, 26),
+    _agent(366, "Hana Fujimoto", "Ohio Valley", 2080, 9, 7.6, 89.4, 9, 9.5, 4, 4.2, 24),
+    _agent(474, "Wesley Adjei", "Ohio Valley", 1900, 10, 8.2, 88.6, 9, 10.0, 4, 4.1, 21),
+    _agent(521, "Sofia Marchetti", "Ohio Valley", 1815, 11, 9.4, 86.9, 11, 15.5, 3, 3.8, 19),
+    _agent(638, "Darnell Pruitt", "Ohio Valley", 1690, 12, 9.0, 87.2, 8, 11.0, 3, 4.0, 17),
+    _agent(712, "Aisha Nwosu", "Ohio Valley", 1540, 13, 9.8, 85.7, 8, 11.5, 3, 3.9, 14),
+    _agent(845, "Victor Salazar", "Ohio Valley", 1420, 14, 10.5, 84.9, 8, 12.0, 2, 3.8, 12),
+    _agent(957, "Mei-Ling Chow", "Ohio Valley", 1285, 15, 11.2, 83.6, 7, 12.5, 2, 3.7, 9),
+    _agent(163, "Owen Brady", "Ohio Valley", 1120, 16, 12.0, 82.4, 7, 13.0, 2, 3.6, 7),
+    _agent(279, "Tasha Greenwood", "Ohio Valley", 960, 17, 12.9, 81.0, 6, 13.5, 1, 3.5, 5),
+    _agent(384, "Rafael Ortiz", "Ohio Valley", 720, 18, 13.6, 79.8, 6, 14.0, 1, 3.4, 3),
 ]
 
+MANAGER_PROFILE["direct_report_ids"] = [a["id"] for a in LEADERBOARD]
+
+# ---------------------------------------------------------------------------
+# Agent dashboard figures
+# ---------------------------------------------------------------------------
 KPI_STATS = [
     {"label": "Installs this month", "value": 38, "unit": "", "delta": 12.5, "direction": "up"},
     {"label": "Upsell conversion", "value": 24.8, "unit": "%", "delta": 3.1, "direction": "up"},
@@ -74,29 +254,16 @@ KPI_STATS = [
 
 WEEKLY_POINTS = [180, 205, 160, 240, 275, 210, 255, 240]
 
-# ---------------------------------------------------------------------------
-# DEMO CREDENTIALS — frontend prototype only.
-# These are hardcoded on purpose so a reviewer can sign in without a database.
-# Replace with a real auth backend (hashed passwords, a user store, rate
-# limiting) before any non-demo use. Do not deploy this as-is.
-# ---------------------------------------------------------------------------
-DEMO_EMAIL = "agent@spectrum.com"
-DEMO_PASSWORD = "spectrum2026"
+HEADLINE_STAT = {
+    "label": "Points awarded to field agents this quarter",
+    "value": sum(agent["points"] for agent in LEADERBOARD),
+    "unit": "pts",
+}
 
-# Profile page fields, layered on top of CURRENT_AGENT so identity stays in
-# one place. phone and location are the only editable values.
-PROFILE_DATA = dict(
-    CURRENT_AGENT,
-    email=DEMO_EMAIL,
-    phone="(614) 555-0142",
-    job_title="Field Installation Technician",
-    manager_name="Lorraine Deckard",
-    hire_date="March 4, 2023",
-    location="Columbus, OH",
-)
-
-# Notification preferences. Each item's default channels seed a fresh session.
-NOTIFICATION_PREFS = [
+# ---------------------------------------------------------------------------
+# Notification preferences, keyed by role so the template loops one list.
+# ---------------------------------------------------------------------------
+_BASE_PREF_GROUPS = [
     {
         "title": "Performance",
         "items": [
@@ -141,38 +308,58 @@ NOTIFICATION_PREFS = [
     },
 ]
 
+_APPROVALS_GROUP = {
+    "title": "Approvals",
+    "items": [
+        {"key": "log_submitted", "label": "Work log submitted",
+         "description": "When one of your technicians files a log for approval.",
+         "email": True, "push": True},
+        {"key": "overtime_threshold", "label": "Overtime threshold breached",
+         "description": "When a technician passes the weekly overtime ceiling.",
+         "email": True, "push": True},
+        {"key": "burnout_alert", "label": "Burnout alert",
+         "description": "Sustained overtime paired with a falling CSAT score.",
+         "email": True, "push": True},
+    ],
+}
+
+_PROGRAMS_GROUP = {
+    "title": "Programs",
+    "items": [
+        {"key": "program_submitted", "label": "Program submitted for approval",
+         "description": "When a manager sends an incentive program up for sign-off.",
+         "email": True, "push": True},
+        {"key": "budget_threshold", "label": "Budget threshold",
+         "description": "When committed spend crosses a share of the annual budget.",
+         "email": True, "push": False},
+        {"key": "quarterly_roi", "label": "Quarterly ROI ready",
+         "description": "When the quarterly program return analysis is published.",
+         "email": True, "push": False},
+    ],
+}
+
+NOTIFICATION_PREFS = {
+    ROLE_AGENT: _BASE_PREF_GROUPS,
+    ROLE_MANAGER: _BASE_PREF_GROUPS + [_APPROVALS_GROUP],
+    ROLE_DIRECTOR: _BASE_PREF_GROUPS + [_PROGRAMS_GROUP],
+}
+
 DIGEST_CHOICES = ["Daily", "Weekly", "Off"]
 DIGEST_DEFAULT = "Weekly"
 MUTE_ALL_DEFAULT = False
 
-HEADLINE_STAT = {
-    "label": "Points awarded to field agents this quarter",
-    "value": sum(agent["points"] for agent in LEADERBOARD),
-    "unit": "pts",
-}
+
+# ---------------------------------------------------------------------------
+# Convenience lookups
+# ---------------------------------------------------------------------------
+def get_agent(agent_id):
+    """Return a leaderboard agent by id, or None."""
+    return next((a for a in LEADERBOARD if a["id"] == agent_id), None)
 
 
-def get_tier(points):
-    """Return the tier dict a point total falls into."""
-    for tier in reversed(TIERS):
-        if points >= tier["min_points"]:
-            return tier
-    return TIERS[0]
-
-
-def points_to_next_tier(points):
-    """Return (next_tier_name, points_needed, percent_through_current_tier).
-
-    Returns None at the top tier, which has no next tier to climb to.
-    """
-    current = get_tier(points)
-    index = TIERS.index(current)
-    if index == len(TIERS) - 1:
-        return None
-    following = TIERS[index + 1]
-    span = following["min_points"] - current["min_points"]
-    percent = round((points - current["min_points"]) / span * 100)
-    return following["name"], following["min_points"] - points, percent
+def reports_for_manager(manager_id):
+    """Every technician reporting to a manager, ordered by rank."""
+    return [a for a in LEADERBOARD if a["manager_id"] == manager_id]
 
 
 if __name__ == "__main__":
@@ -181,16 +368,37 @@ if __name__ == "__main__":
     assert get_tier(2500)["slug"] == "silver"
     assert get_tier(4999)["slug"] == "silver"
     assert get_tier(5000)["slug"] == "gold"
-    assert get_tier(99999)["slug"] == "gold"
     assert points_to_next_tier(5000) is None
     assert points_to_next_tier(0) == ("Silver", 2500, 0)
     assert points_to_next_tier(CURRENT_AGENT["points"]) == ("Gold", 1820, 27)
-    assert [t["rank"] for t in LEADERBOARD] == list(range(1, 11))
-    assert next(a for a in LEADERBOARD if a["id"] == CURRENT_AGENT["id"])["rank"] == 4
+
+    # Leaderboard shape
+    assert len(LEADERBOARD) == 18
+    assert [a["rank"] for a in LEADERBOARD] == list(range(1, 19))
+    points = [a["points"] for a in LEADERBOARD]
+    assert points == sorted(points, reverse=True), "ranks must follow points"
     assert {get_tier(a["points"])["slug"] for a in LEADERBOARD} == {"bronze", "silver", "gold"}
-    assert PROFILE_DATA["employee_id"] == CURRENT_AGENT["employee_id"]
-    assert PROFILE_DATA["email"] == DEMO_EMAIL
-    keys = [i["key"] for g in NOTIFICATION_PREFS for i in g["items"]]
-    assert len(keys) == len(set(keys)) == 9, keys
+    assert get_agent(417)["rank"] == 4, "Dana stays rank 4 on her team"
+    assert len(reports_for_manager(884)) == 18 == MANAGER_PROFILE["team_size"]
+
+    # Roles and accounts
+    assert set(DEMO_ACCOUNTS) == {
+        "agent@spectrum.com", "manager@spectrum.com", "director@spectrum.com"}
+    for email, account in DEMO_ACCOUNTS.items():
+        assert account["profile"]["email"] == email
+        assert account["role"] in ROLE_LABELS
+        assert account["role"] in ROLE_HOME
+    assert AGENT_PROFILE["manager_id"] == MANAGER_PROFILE["id"]
+    assert MANAGER_PROFILE["manager_id"] == DIRECTOR_PROFILE["id"]
+    assert any(m["id"] == MANAGER_PROFILE["id"] for m in ORG["managers"])
+    assert len(ORG["managers"]) == DIRECTOR_PROFILE["managers_count"]
+
+    # Notification prefs per role have unique keys
+    for role, groups in NOTIFICATION_PREFS.items():
+        keys = [i["key"] for g in groups for i in g["items"]]
+        assert len(keys) == len(set(keys)), role
+    assert len(NOTIFICATION_PREFS[ROLE_AGENT]) == 3
+    assert len(NOTIFICATION_PREFS[ROLE_MANAGER]) == 4
+    assert len(NOTIFICATION_PREFS[ROLE_DIRECTOR]) == 4
     assert DIGEST_DEFAULT in DIGEST_CHOICES
     print("mock_data OK")

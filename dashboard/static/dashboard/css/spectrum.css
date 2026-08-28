@@ -1222,3 +1222,119 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
   .sp-pref-controls { margin-left: 0; }
   .sp-saved { width: auto; }
 }
+
+/* ===============================================================
+   Role chrome
+   =============================================================== */
+.sp-badge {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: .4rem;
+  padding: .1rem .35rem;
+  border-radius: 999px;
+  background-color: var(--sp-blue);
+  color: var(--sp-white);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: center;
+  vertical-align: middle;
+}
+.sp-profile-role {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--sp-muted);
+}
+.sp-role-chip {
+  display: inline-block;
+  padding: .3em .75em;
+  border: 1px solid var(--sp-border-strong);
+  border-radius: 999px;
+  color: var(--sp-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+/* Placeholder / 403 shells */
+.sp-stub { display: flex; justify-content: center; padding: 3rem 0; }
+.sp-stub-card { max-width: 520px; padding: 2.5rem; text-align: center; }
+
+/* ===============================================================
+   Login role picker
+   =============================================================== */
+.sp-role-picker { display: flex; gap: .5rem; margin-bottom: 1rem; }
+.sp-role-card { position: relative; flex: 1 1 0; min-width: 0; }
+.sp-role-card input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; opacity: 0; cursor: pointer;
+}
+.sp-role-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .4rem;
+  height: 100%;
+  padding: .9rem .6rem;
+  border: 2px solid var(--sp-border);
+  border-radius: var(--sp-radius);
+  background-color: var(--sp-white);
+  text-align: center;
+  transition: border-color var(--sp-ease), background-color var(--sp-ease);
+}
+.sp-role-card:hover .sp-role-card-body { border-color: var(--sp-border-strong); }
+.sp-role-card input:checked + .sp-role-card-body { border-color: var(--sp-blue); background-color: var(--sp-tint); }
+.sp-role-card input:focus-visible + .sp-role-card-body { outline: 2px solid var(--sp-blue); outline-offset: 2px; }
+.sp-role-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-color: var(--sp-navy);
+  color: var(--sp-white);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sp-role-name { font-size: 12px; font-weight: 600; color: var(--sp-navy); line-height: 1.3; }
+.sp-role-title { font-size: 11px; color: var(--sp-muted); line-height: 1.3; }
+
+@media (max-width: 575.98px) {
+  .sp-role-picker { flex-direction: column; }
+  .sp-role-card-body { flex-direction: row; justify-content: flex-start; text-align: left; }
+}
+
+/* ===============================================================
+   Role profile blocks
+   =============================================================== */
+.sp-stat-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+.sp-tier-stat {
+  flex: 1 1 0;
+  min-width: 84px;
+  padding: .8rem;
+  border: 1px solid var(--sp-border);
+  border-radius: 12px;
+  text-align: center;
+}
+.sp-tier-stat-bronze { border-color: var(--tier-bronze); background-color: var(--tier-bronze-bg); }
+.sp-tier-stat-silver { border-color: var(--tier-silver); background-color: var(--tier-silver-bg); }
+.sp-tier-stat-gold   { border-color: var(--tier-gold);   background-color: var(--tier-gold-bg); }
+.sp-tier-stat-value { font-size: var(--sp-fs-2); font-weight: 600; line-height: 1; }
+.sp-tier-stat-bronze .sp-tier-stat-value { color: var(--tier-bronze); }
+.sp-tier-stat-silver .sp-tier-stat-value { color: var(--tier-silver); }
+.sp-tier-stat-gold   .sp-tier-stat-value { color: var(--tier-gold); }
+.sp-tier-stat-label {
+  margin: .3rem 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--sp-muted);
+}
+
+.sp-people { list-style: none; margin: .5rem 0 0; padding: 0; }
+.sp-people li { display: flex; gap: .75rem; padding: .45rem 0; font-size: var(--sp-fs-4); }
+.sp-people li span:last-child { margin-left: auto; color: var(--sp-muted); }

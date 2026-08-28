@@ -25,15 +25,24 @@ is unused; Django's built-in apps are installed but nothing here reads them.
 |---|---|---|
 | `/` | `landing` | Marketing page: tier explorer + avatar guide |
 | `/dashboard/` | `dashboard` | Field agent dashboard |
+| `/log-work/` | `log_work` | Agent work-log submission *(stub)* |
+| `/manager/` | `manager_team` | Manager team view *(stub)* |
+| `/manager/programs/` | `manager_programs` | Manager programs *(stub)* |
+| `/manager/approvals/` | `manager_approvals` | Manager approvals *(stub)* |
+| `/director/` | `director_overview` | Director overview *(stub)* |
+| `/director/programs/` | `director_programs` | Director programs *(stub)* |
+| `/director/approvals/` | `director_approvals` | Director approvals *(stub)* |
 | `/faqs/` | `faqs` | FAQ accordion, sourced from `chat_responses.py` |
+| `/dev/reset-store/` | `dev_reset_store` | POST, no auth — resets the in-memory store |
 | `/login/` | `login` | Sign-in form (GET) and credential check (POST) |
 | `/logout/` | `logout` | POST-only sign out; a stray GET redirects |
 | `/profile/` | `profile` | Account profile, editable phone and location |
 | `/notifications/` | `notification_settings` | Autosaving notification preferences |
 | `/api/chat/` | `chat_api` | `POST` JSON endpoint for the policy assistant |
 
-`/dashboard/`, `/profile/` and `/notifications/` are wrapped in `agent_required`.
-`/`, `/faqs/` and `/login/` are public.
+Routes are gated by `role_required(*roles)` in `dashboard/decorators.py`.
+`/`, `/faqs/` and `/login/` are public; `/profile/` and `/notifications/` need
+any signed-in role; the rest are role-specific per the table above.
 
 ## Structure
 
@@ -174,6 +183,80 @@ to `/profile/` and `/notifications/`, and Sign Out is a CSRF-protected POST form
 not a link. Signed **out**, a single "Sign in" pill replaces it. The login page
 hides the nav links and profile menu entirely, showing only the logo lockup.
 
+## Roles
+
+Three roles, three demo accounts. **Password for all three: `spectrum2026`.**
+
+| Email | Role | Person | Lands on |
+|---|---|---|---|
+| `agent@spectrum.com` | agent | Dana Whitfield, Field Installation Technician | `/dashboard/` |
+| `manager@spectrum.com` | manager | Marcus Vale, Field Operations Manager | `/manager/` |
+| `director@spectrum.com` | director | Priya Raghunathan, Director of Field Operations | `/director/` |
+
+The login page has a role picker — three cards that fill the form on click.
+Typing by hand still works and clears the selection.
+
+**Org chart** (`mock_data.ORG`): Priya → 6 managers → Marcus supervises 18
+technicians. Dana is one of Marcus's reports, rank 4 on his team. Each of the 18
+carries `repeat_rate`, `on_time_rate`, `jobs_this_week`,
+`overtime_hours_this_week`, `safety_audits_passed`, `csat` and `tenure_months`,
+shaped so the numbers tell a coherent story: longer tenure trends toward more
+points and better on-time rates, and two agents (Ibrahim Cole, Sofia Marchetti)
+break the pattern with heavy overtime and depressed CSAT — the burnout signal
+the manager views are built to surface.
+
+### How access control works
+
+`role_required(*roles)` sends signed-out visitors to `/login/?next=<path>` and
+renders a **styled 403 page with the portal chrome** — never a bare Django 403 —
+when a signed-in user hits an area their role doesn't cover. `?next=` is honoured
+only when the path is relative, in-site, **and** open to that role; otherwise it
+falls back to the role's home.
+
+`context_processors.portal` exposes `role`, `is_agent` / `is_manager` /
+`is_director`, `current_user`, and a `nav_items` list computed per role, so
+`base.html` loops over data instead of nesting template conditionals. Approvals
+items carry a live count badge, suppressed at zero.
+
+| Role | Navigation |
+|---|---|
+| agent | Dashboard · Log Work · FAQs |
+| manager | Team · Programs · Approvals · FAQs |
+| director | Overview · Programs · Approvals · FAQs |
+
+## State: `mock_data.py` vs `store.py`
+
+**`mock_data.py`** is static reference data — tiers and thresholds, KPI
+definitions, the org chart, demo accounts, notification defaults. It never
+changes at runtime.
+
+**`store.py`** holds everything that *does* change: work logs, programs,
+notifications.
+
+> ### `store.py` is process-global memory, not a database
+>
+> Session storage cannot carry a workflow between two people — when an agent
+> submits a work log, a manager in a different browser has to see it. `store.py`
+> is a module-level singleton that makes that possible.
+>
+> **It is not persistent.** Every worker restart wipes it, and it does **not**
+> survive multiple processes — run a single dev worker or two users will see two
+> different worlds. There is no durability, no transactions, no migration path.
+> **Replace it with real Django models before any non-demo use.**
+
+Views never touch `STORE` directly; every read and write goes through a helper
+(`add_log`, `update_log_status`, `get_pending_logs_for_manager`, `get_programs`,
+`add_program`, `update_program_status`, …). Every mutation holds a
+`threading.Lock`, because the dev server is threaded, and reads hand back deep
+copies so a caller cannot mutate the store by accident.
+
+`POST /dev/reset-store/` (no auth) restores the seed state so a demo restarts
+clean. Run its self-check with:
+
+```bash
+.venv/bin/python dashboard/store.py     # prints "store OK"
+```
+
 ## Auth — prototype only
 
 > **This is not real authentication.** Credentials are hardcoded constants
@@ -184,19 +267,15 @@ hides the nav links and profile menu entirely, showing only the logo lockup.
 
 ### Demo credentials
 
-```
-Email:    agent@spectrum.com
-Password: spectrum2026
-```
-
-They are defined in `mock_data.py` (`DEMO_EMAIL` / `DEMO_PASSWORD`) and shown in
-a dashed "Demo access" box on the login page so a grader can get in.
+The three accounts above are defined in `mock_data.DEMO_ACCOUNTS`, each carrying
+a password, a role and the person's full profile. They are shown in a dashed
+"Demo access" box on the login page so a grader can get in.
 
 ### How it works
 
-No Django auth app, no user model, no migrations. `login` compares the
-submitted email (stripped, case-insensitive) and password against the constants
-and sets `request.session["is_authenticated"]`. `logout` is POST-only with CSRF
+No Django auth app, no user model, no migrations. `login` looks the submitted
+email (stripped, lowercased) up in `DEMO_ACCOUNTS`, compares the password, and
+stores `is_authenticated`, `user_email`, `role` and `display_name` in the session. `logout` is POST-only with CSRF
 and flushes the session. Sessions use the signed-cookie backend, so none of this
 needs a database table.
 
@@ -219,14 +298,24 @@ Both sit under `account_base.html`, which supplies the "Account" heading and a
 tab strip. The tabs are real links to real routes, not JS tabs, so each survives
 a refresh and deep-links cleanly.
 
-**My Profile** shows an identity card (72px initials avatar, name, job title,
+**My Profile** renders a shared identity header plus a role-specific block.
+Only the agent shows a tier badge; the manager shows "18 technicians" and the
+director "6 managers · 142 technicians". Managers get a team snapshot (size,
+average tier, team points, per-tier counts in the tier colours, longest-tenured
+and newest reports); directors get a territory snapshot (managers, technicians,
+warehouses, NPS, retention, budget as `$8.4M`). For the agent it shows an
+identity card (72px initials avatar, name, job title,
 tier badge), a two-column details list, and a performance summary pulled from the
 `mock_data` helpers. Only **phone** and **location** are editable: "Edit details"
 swaps those two values for inputs in place, Save POSTs them into the session, and
 Cancel restores from a `data-original` attribute with no round trip. Everything
 else is marked managed by HR.
 
-**Notifications** renders nine preferences across three groups, each with Email
+**Notifications** is driven by a role-keyed structure in `mock_data`, so the
+template loops one list. All roles get the nine base preferences; managers gain
+an **Approvals** group (log submitted, overtime threshold, burnout alert) and
+directors gain a **Programs** group (program submitted, budget threshold,
+quarterly ROI). It renders those preferences each with Email
 and Push switches hand-rolled from a checkbox plus a styled track — no Bootstrap
 switch, no library, keyboard operable with a visible focus ring. Every change
 autosaves to the session (debounced 300ms per key+channel) and flashes "Saved".
@@ -286,14 +375,14 @@ dashboard — has a commented block marking where the `<source>` or provider
 `<iframe>` goes. The play overlay already drives the element, so it works
 unchanged the moment a source is added.
 
-## Next: Manager and Director roles
+## Next: manager and director feature pages
 
-The current build serves one persona — the field agent. The next slice adds:
+The role foundation — accounts, routing, access control, the shared store and
+the role-aware profile and notification pages — is in place. The seven feature
+routes render "coming in the next pass" stubs and are filled in by later passes:
 
-- **Manager** — team roster view, per-agent drill-down, tier distribution across
-  a team, and the ability to flag a job for quality review. Needs
-  `mock_data` to grow a `TEAMS` structure and agents to carry a `manager_id`.
-- **Director** — region-level rollups, cost-of-program against payout budget,
-  and tier migration over time. Mostly aggregation over the same shapes.
-- **Shared work** — a role switcher, per-role nav, and moving the leaderboard's
-  sort and filter server-side once the board outgrows a single page.
+- **Agent** — `/log-work/`: submit jobs, hours and points for approval.
+- **Manager** — `/manager/` roster and drill-down, `/manager/programs/` program
+  builder, `/manager/approvals/` work-log review queue.
+- **Director** — `/director/` territory rollups, `/director/programs/` spend
+  against budget, `/director/approvals/` program sign-off.

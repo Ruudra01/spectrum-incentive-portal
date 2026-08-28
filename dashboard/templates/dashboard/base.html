@@ -34,11 +34,12 @@
         <span class="sp-nav-toggle-bar"></span>
       </button>
 
+      {# Navigation comes from nav_items, computed per role. #}
       <nav class="sp-nav" id="spNavPanel" aria-label="Main">
-        <a class="sp-nav-link{% if active == 'dashboard' %} is-active{% endif %}"
-           href="{% url 'dashboard:dashboard' %}">Dashboard</a>
-        <a class="sp-nav-link{% if active == 'faqs' %} is-active{% endif %}"
-           href="{% url 'dashboard:faqs' %}">FAQs</a>
+        {% for item in nav_items %}
+        <a class="sp-nav-link{% if active == item.match %} is-active{% endif %}"
+           href="{% url item.url_name %}">{{ item.label }}{% if item.badge %}<span class="sp-badge">{{ item.badge }}</span>{% endif %}</a>
+        {% endfor %}
       </nav>
 
       <div class="sp-account">
@@ -46,8 +47,8 @@
         <div class="sp-profile" id="spProfile">
           <button type="button" class="sp-profile-trigger" id="spProfileTrigger"
                   aria-expanded="false" aria-controls="spProfileMenu" aria-haspopup="true">
-            <span class="sp-avatar" aria-hidden="true">{{ current_agent.initials }}</span>
-            <span class="sp-profile-name">{{ current_agent.first_name }}</span>
+            <span class="sp-avatar" aria-hidden="true">{{ current_user.initials }}</span>
+            <span class="sp-profile-name">{{ current_user.first_name }}</span>
             <svg class="sp-profile-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="m6 9 6 6 6-6"/>
@@ -56,8 +57,9 @@
 
           <div class="sp-profile-menu" id="spProfileMenu" role="menu" hidden>
             <div class="sp-profile-head">
-              <p class="sp-profile-fullname mb-0">{{ current_agent.name }}</p>
-              <p class="sp-profile-meta mb-0">{{ current_agent.employee_id }} &middot; {{ current_agent.region }}</p>
+              <p class="sp-profile-fullname mb-0">{{ current_user.name }}</p>
+              <p class="sp-profile-role mb-1">{{ current_user.role_label }}</p>
+              <p class="sp-profile-meta mb-0">{{ current_user.employee_id }} &middot; {{ current_user.region }}</p>
             </div>
             <hr class="sp-profile-divider">
             <a class="sp-profile-item" role="menuitem" href="{% url 'dashboard:profile' %}">My Profile</a>

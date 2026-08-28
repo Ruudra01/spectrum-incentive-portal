@@ -4,23 +4,30 @@
 
 {% block account_content %}
 <div class="row g-3">
-
-  {# Identity #}
   <div class="col-lg-8">
+
+    {# Shared identity header — the badge beside it differs by role. #}
     <div class="sp-card p-4 sp-identity">
-      <span class="sp-avatar-lg" aria-hidden="true">{{ current_agent.initials }}</span>
+      <span class="sp-avatar-lg" aria-hidden="true">{{ current_user.initials }}</span>
       <div class="sp-identity-text">
-        <h1 class="mb-1">{{ current_agent.name }}</h1>
-        <p class="sp-muted mb-2">{{ current_agent.job_title }}</p>
-        <span class="sp-tier sp-tier-{{ tier.slug }}">{{ tier.name }}</span>
+        <h1 class="mb-1">{{ current_user.name }}</h1>
+        <p class="sp-muted mb-2">{{ current_user.job_title }}</p>
+        <span class="sp-role-chip">{{ current_user.role_label }}</span>
+        {% if is_agent %}
+          <span class="sp-tier sp-tier-{{ tier.slug }}">{{ tier.name }}</span>
+        {% elif is_manager %}
+          <span class="sp-role-chip">{{ current_user.team_size }} technicians</span>
+        {% elif is_director %}
+          <span class="sp-role-chip">{{ current_user.managers_count }} managers &middot; {{ current_user.technicians_count }} technicians</span>
+        {% endif %}
       </div>
-      <span class="sp-tooltip sp-identity-action" data-tip="Coming soon">
+      <span class="sp-tooltip sp-identity-action">
         <a class="btn-sp-secondary" href="#" aria-describedby="spPhotoTip">Change photo</a>
         <span class="sp-tooltip-bubble" id="spPhotoTip" role="tooltip">Coming soon</span>
       </span>
     </div>
 
-    {# Details #}
+    {# Details — phone and location editable for every role. #}
     <div class="sp-card p-4 mt-3">
       <div class="sp-details-head">
         <h2 class="mb-0">Details</h2>
@@ -30,28 +37,36 @@
       <form method="post" action="{% url 'dashboard:profile' %}" id="spProfileForm">
         {% csrf_token %}
         <dl class="sp-details">
-          <div class="sp-detail"><dt>Employee ID</dt><dd>{{ current_agent.employee_id }}</dd></div>
-          <div class="sp-detail"><dt>Email</dt><dd>{{ current_agent.email }}</dd></div>
+          <div class="sp-detail"><dt>Employee ID</dt><dd>{{ current_user.employee_id }}</dd></div>
+          <div class="sp-detail"><dt>Email</dt><dd>{{ current_user.email }}</dd></div>
 
           <div class="sp-detail">
             <dt>Phone</dt>
-            <dd data-field="phone" data-original="{{ current_agent.phone }}">
-              <span class="sp-value">{{ current_agent.phone }}</span>
+            <dd data-field="phone" data-original="{{ current_user.phone }}">
+              <span class="sp-value">{{ current_user.phone }}</span>
             </dd>
           </div>
 
-          <div class="sp-detail"><dt>Region</dt><dd>{{ current_agent.region }}</dd></div>
-          <div class="sp-detail"><dt>Team</dt><dd>{{ current_agent.team }}</dd></div>
-          <div class="sp-detail"><dt>Reports to</dt><dd>{{ current_agent.manager_name }}</dd></div>
+          <div class="sp-detail"><dt>Region</dt><dd>{{ current_user.region }}</dd></div>
+          {% if not is_director %}
+          <div class="sp-detail"><dt>Team</dt><dd>{{ current_user.team }}</dd></div>
+          {% endif %}
+          {% if is_manager %}
+          <div class="sp-detail"><dt>Warehouse</dt><dd>{{ current_user.warehouse }}</dd></div>
+          {% endif %}
+          <div class="sp-detail"><dt>Reports to</dt><dd>{{ current_user.manager_name }}</dd></div>
 
           <div class="sp-detail">
             <dt>Location</dt>
-            <dd data-field="location" data-original="{{ current_agent.location }}">
-              <span class="sp-value">{{ current_agent.location }}</span>
+            <dd data-field="location" data-original="{{ current_user.location }}">
+              <span class="sp-value">{{ current_user.location }}</span>
             </dd>
           </div>
 
-          <div class="sp-detail"><dt>Start date</dt><dd>{{ current_agent.hire_date }}</dd></div>
+          <div class="sp-detail"><dt>Start date</dt><dd>{{ current_user.hire_date }}</dd></div>
+          {% if is_manager %}
+          <div class="sp-detail"><dt>Years in role</dt><dd>{{ current_user.years_in_role }}</dd></div>
+          {% endif %}
         </dl>
 
         <p class="sp-muted sp-small sp-managed">Everything except phone and location is managed by HR.</p>
@@ -64,13 +79,14 @@
     </div>
   </div>
 
-  {# Performance summary #}
   <div class="col-lg-4">
+
+    {% if is_agent %}
     <div class="sp-card p-4">
       <h2 class="mb-3">Performance</h2>
       <dl class="sp-summary">
-        <div><dt>Points</dt><dd>{{ current_agent.points }}</dd></div>
-        <div><dt>Rank</dt><dd>#{{ current_agent.rank }}</dd></div>
+        <div><dt>Points</dt><dd>{{ current_user.points }}</dd></div>
+        <div><dt>Rank</dt><dd>#{{ current_user.rank }}</dd></div>
         <div><dt>Tier</dt><dd><span class="sp-tier sp-tier-{{ tier.slug }}">{{ tier.name }}</span></dd></div>
         <div><dt>To next tier</dt>
           <dd>{% if next_tier %}{{ next_tier.needed }} pts to {{ next_tier.name }}{% else %}Top tier reached{% endif %}</dd>
@@ -78,8 +94,59 @@
       </dl>
       <a class="sp-link-through" href="{% url 'dashboard:dashboard' %}">View full dashboard &rarr;</a>
     </div>
-  </div>
 
+    {% elif is_manager %}
+    <div class="sp-card p-4">
+      <h2 class="mb-3">Team snapshot</h2>
+      <dl class="sp-summary">
+        <div><dt>Team size</dt><dd>{{ current_user.team_size }}</dd></div>
+        <div><dt>Average tier</dt>
+          <dd><span class="sp-tier sp-tier-{{ team_average_tier.slug }}">{{ team_average_tier.name }}</span></dd></div>
+        <div><dt>Team points</dt><dd>{{ team_points }}</dd></div>
+      </dl>
+
+      <div class="sp-stat-row mt-3">
+        {% for entry in tier_counts %}
+        <div class="sp-tier-stat sp-tier-stat-{{ entry.tier.slug }}">
+          <p class="sp-tier-stat-value mb-0">{{ entry.count }}</p>
+          <p class="sp-tier-stat-label">{{ entry.tier.name }}</p>
+        </div>
+        {% endfor %}
+      </div>
+
+      <h3 class="mt-4 mb-1">Longest tenured</h3>
+      <ul class="sp-people">
+        {% for agent in longest_tenured %}
+        <li><span>{{ agent.name }}</span><span>{{ agent.tenure_months }} mo</span></li>
+        {% endfor %}
+      </ul>
+
+      <h3 class="mt-3 mb-1">Newest</h3>
+      <ul class="sp-people">
+        {% for agent in newest %}
+        <li><span>{{ agent.name }}</span><span>{{ agent.tenure_months }} mo</span></li>
+        {% endfor %}
+      </ul>
+
+      <a class="sp-link-through" href="{% url 'dashboard:manager_team' %}">View team &rarr;</a>
+    </div>
+
+    {% elif is_director %}
+    <div class="sp-card p-4">
+      <h2 class="mb-3">Territory snapshot</h2>
+      <dl class="sp-summary">
+        <div><dt>Managers</dt><dd>{{ current_user.managers_count }}</dd></div>
+        <div><dt>Technicians</dt><dd>{{ current_user.technicians_count }}</dd></div>
+        <div><dt>Warehouses</dt><dd>{{ current_user.warehouses }}</dd></div>
+        <div><dt>Region NPS</dt><dd>{{ current_user.region_nps }}</dd></div>
+        <div><dt>Retention</dt><dd>{{ current_user.retention_rate }}%</dd></div>
+        <div><dt>Annual budget</dt><dd>{{ budget_display }}</dd></div>
+      </dl>
+      <a class="sp-link-through" href="{% url 'dashboard:director_overview' %}">View overview &rarr;</a>
+    </div>
+    {% endif %}
+
+  </div>
 </div>
 {% endblock %}
 

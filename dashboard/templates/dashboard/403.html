@@ -1,0 +1,21 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}No access — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+    <div class="sp-stub">
+      <div class="sp-card sp-stub-card">
+        <p class="sp-eyebrow mb-2">403</p>
+        <h1 class="mb-2">You don't have access to this area</h1>
+        <p class="sp-muted mb-4">
+          Your account role doesn't include this section. If you think that's wrong,
+          your manager can request a change.
+        </p>
+        <a class="btn-sp-primary" href="{{ home_url }}">Back to my home</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
