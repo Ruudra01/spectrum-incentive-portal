@@ -5,6 +5,8 @@ KPI definitions, the org chart, demo accounts and notification defaults.
 Anything mutable — work logs, programs, approvals — lives in store.py.
 """
 
+import math
+
 # ---------------------------------------------------------------------------
 # Roles
 # ---------------------------------------------------------------------------
@@ -260,6 +262,95 @@ HEADLINE_STAT = {
     "unit": "pts",
 }
 
+
+# ---------------------------------------------------------------------------
+# Work logging: job types, point modifiers, and the one point calculation
+# ---------------------------------------------------------------------------
+JOB_TYPES = [
+    {"code": "new_install_residential", "label": "New install — residential",
+     "group": "Installs", "base_points": 120, "est_minutes": 90},
+    {"code": "new_install_commercial", "label": "New install — commercial",
+     "group": "Installs", "base_points": 180, "est_minutes": 150},
+    {"code": "service_repair", "label": "Service repair",
+     "group": "Repairs", "base_points": 80, "est_minutes": 60},
+    {"code": "signal_troubleshoot", "label": "Signal troubleshoot",
+     "group": "Repairs", "base_points": 90, "est_minutes": 75},
+    {"code": "equipment_swap", "label": "Equipment swap",
+     "group": "Repairs", "base_points": 50, "est_minutes": 30},
+    {"code": "upgrade_premium_router", "label": "Premium router upgrade",
+     "group": "Repairs", "base_points": 70, "est_minutes": 40},
+    {"code": "aerial_line_work", "label": "Aerial line work",
+     "group": "Line work", "base_points": 140, "est_minutes": 120},
+    {"code": "underground_drop", "label": "Underground drop",
+     "group": "Line work", "base_points": 130, "est_minutes": 110},
+    {"code": "customer_education", "label": "Customer education",
+     "group": "Customer", "base_points": 30, "est_minutes": 20},
+]
+
+JOB_TYPES_BY_CODE = {j["code"]: j for j in JOB_TYPES}
+
+# Render order for the grouped <select>.
+JOB_TYPE_GROUPS = ["Installs", "Repairs", "Line work", "Customer"]
+
+POINT_MODIFIERS = [
+    {"code": "first_time_fix", "label": "First-time fix", "multiplier": 0.15,
+     "description": "Resolved without a follow-up visit."},
+    {"code": "premium_upsell", "label": "Premium upsell", "multiplier": 0.25,
+     "description": "Customer took a premium add-on."},
+    {"code": "after_hours", "label": "After hours", "multiplier": 0.20,
+     "description": "Completed outside the standard window."},
+    {"code": "adverse_weather", "label": "Weather protected", "multiplier": 0.15,
+     "description": "Storm, snow or extreme heat — pay is protected, not penalised."},
+    {"code": "safety_flagged", "label": "Safety flagged", "multiplier": -1.0,
+     "description": "PPE or ladder protocol not followed. Zeroes the entry."},
+]
+
+POINT_MODIFIERS_BY_CODE = {m["code"]: m for m in POINT_MODIFIERS}
+
+SAFETY_MODIFIER = "safety_flagged"
+WEATHER_MODIFIER = "adverse_weather"
+
+
+def calculate_points(job_type, modifiers):
+    """Points for one logged job. The single source of truth.
+
+    Each modifier's delta is computed off the BASE points and added, so the
+    preview can show one line per modifier. `safety_flagged` overrides
+    everything and returns 0.
+
+    The browser mirrors this from JOB_TYPES/POINT_MODIFIERS handed over as
+    JSON, so nothing is hardcoded twice. floor(x + 0.5) is used rather than
+    round() because Python rounds halves to even while JS Math.round goes
+    half-up — that difference would silently drift the two apart.
+    """
+    job = JOB_TYPES_BY_CODE.get(job_type)
+    if job is None:
+        return 0
+    modifiers = modifiers or []
+    if SAFETY_MODIFIER in modifiers:
+        return 0
+
+    base = job["base_points"]
+    total = base
+    for code in modifiers:
+        modifier = POINT_MODIFIERS_BY_CODE.get(code)
+        if modifier:
+            total += math.floor(base * modifier["multiplier"] + 0.5)
+    return max(total, 0)
+
+
+# Demo conversion rate only. Real rates vary by program, region and tier —
+# this single number stands in for that whole table.
+POINT_VALUE_USD = 0.18
+
+NEXT_PAYOUT_DATE = "September 1, 2026"
+
+
+def points_to_usd(points):
+    """Dollar value of a point total at the demo rate."""
+    return round(points * POINT_VALUE_USD, 2)
+
+
 # ---------------------------------------------------------------------------
 # Notification preferences, keyed by role so the template loops one list.
 # ---------------------------------------------------------------------------
@@ -401,4 +492,30 @@ if __name__ == "__main__":
     assert len(NOTIFICATION_PREFS[ROLE_MANAGER]) == 4
     assert len(NOTIFICATION_PREFS[ROLE_DIRECTOR]) == 4
     assert DIGEST_DEFAULT in DIGEST_CHOICES
+
+    # Work logging
+    assert len(JOB_TYPES) == 9
+    assert {j["group"] for j in JOB_TYPES} == set(JOB_TYPE_GROUPS)
+    assert len(POINT_MODIFIERS) == 5
+    # Base with no modifiers
+    assert calculate_points("new_install_residential", []) == 120
+    assert calculate_points("new_install_commercial", []) == 180
+    # Additive deltas off the base
+    assert calculate_points("new_install_residential", ["first_time_fix"]) == 138
+    assert calculate_points("new_install_residential", ["premium_upsell"]) == 150
+    assert calculate_points("new_install_residential", ["first_time_fix", "premium_upsell"]) == 168
+    assert calculate_points("service_repair", ["after_hours"]) == 96
+    # Half-value rounding must go half-up, matching JS Math.round
+    assert math.floor(90 * 0.15 + 0.5) == 14
+    assert calculate_points("signal_troubleshoot", ["first_time_fix"]) == 104
+    # safety_flagged zeroes everything, whatever else is applied
+    assert calculate_points("new_install_commercial", ["safety_flagged"]) == 0
+    assert calculate_points("new_install_commercial",
+                            ["first_time_fix", "premium_upsell", "safety_flagged"]) == 0
+    assert calculate_points("nonsense", []) == 0
+    assert calculate_points("service_repair", ["nonsense"]) == 80
+    assert calculate_points("service_repair", None) == 80
+    # Ledger
+    assert points_to_usd(1000) == 180.0
+    assert POINT_VALUE_USD == 0.18
     print("mock_data OK")

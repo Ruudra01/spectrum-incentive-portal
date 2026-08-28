@@ -17,14 +17,34 @@ hold _LOCK for every mutation (the dev server is threaded).
 
 import copy
 import itertools
+import random
 import threading
-from datetime import date
+from datetime import date, datetime, timedelta
+
+from . import mock_data
 
 _LOCK = threading.Lock()
 
-STATUS_PENDING = "pending"
+# Work-log lifecycle: draft -> submitted -> approved | rejected | changes_requested
+# changes_requested returns an entry to editable while keeping the reviewer note.
+STATUS_DRAFT = "draft"
+STATUS_SUBMITTED = "submitted"
 STATUS_APPROVED = "approved"
 STATUS_REJECTED = "rejected"
+STATUS_CHANGES = "changes_requested"
+
+EDITABLE_STATUSES = (STATUS_DRAFT, STATUS_CHANGES)
+
+STATUS_LABELS = {
+    STATUS_DRAFT: "Draft",
+    STATUS_SUBMITTED: "Submitted",
+    STATUS_APPROVED: "Approved",
+    STATUS_REJECTED: "Rejected",
+    STATUS_CHANGES: "Changes requested",
+}
+
+# Kept so older call sites reading a "pending" queue still resolve.
+STATUS_PENDING = STATUS_SUBMITTED
 
 PROGRAM_DRAFT = "draft"
 PROGRAM_PENDING = "pending"
@@ -32,38 +52,134 @@ PROGRAM_APPROVED = "approved"
 PROGRAM_REJECTED = "rejected"
 
 
+
+_JOB_MIX = [
+    "new_install_residential", "new_install_residential", "service_repair",
+    "signal_troubleshoot", "equipment_swap", "upgrade_premium_router",
+    "new_install_commercial", "aerial_line_work", "underground_drop",
+    "customer_education",
+]
+
+_STREETS = [
+    "1420 Neil Ave, Columbus", "88 Grandview Ave, Columbus",
+    "3307 Indianola Ave, Columbus", "615 Parsons Ave, Columbus",
+    "2210 Henderson Rd, Columbus", "47 Hudson St, Columbus",
+    "1902 Olentangy River Rd, Columbus", "760 Kenny Rd, Columbus",
+    "5140 Sinclair Rd, Columbus", "231 Chittenden Ave, Columbus",
+]
+
+# The five reports besides Dana whose history seeds Marcus's queue and team views.
+_SEEDED_AGENTS = [
+    (417, "Dana Whitfield"),
+    (803, "Ibrahim Cole"),
+    (521, "Sofia Marchetti"),
+    (288, "Grace Okonkwo"),
+    (731, "Alonzo Reyes"),
+    (540, "Tomas Lindqvist"),
+]
+
+
+def _entry(counter, agent_id, agent_name, on_date, job_type, modifiers, minutes,
+           street, status, ref_n, review_note="", reviewer="Marcus Vale"):
+    decided = status in (STATUS_APPROVED, STATUS_REJECTED, STATUS_CHANGES)
+    submitted = status != STATUS_DRAFT
+    return {
+        "id": next(counter),
+        "agent_id": agent_id,
+        "agent_name": agent_name,
+        "manager_id": 884,
+        "date": on_date.isoformat(),
+        "job_type": job_type,
+        "work_order_ref": f"WO-2026-{ref_n:04d}",
+        "address_line": street,
+        "duration_minutes": minutes,
+        "modifiers": list(modifiers),
+        "notes": "",
+        "points": mock_data.calculate_points(job_type, modifiers),
+        "status": status,
+        "submitted_at": f"{on_date.isoformat()} 17:40" if submitted else None,
+        "reviewed_at": f"{(on_date + timedelta(days=1)).isoformat()} 08:15" if decided else None,
+        "reviewer_id": 884 if decided else None,
+        "review_note": review_note,
+    }
+
+
+def _seed_work_logs():
+    """About three weeks of history so every view has real content."""
+    rng = random.Random(20260828)
+    counter = itertools.count(1)
+    today = date.today()
+    logs = []
+    ref = 100
+
+    for agent_id, agent_name in _SEEDED_AGENTS:
+        is_dana = agent_id == 417
+        # Dana carries the richest history; the others seed the manager queue.
+        for days_back in range(21, 0, -1):
+            day = today - timedelta(days=days_back)
+            if day.weekday() == 6:            # no Sunday work
+                continue
+            if not is_dana and rng.random() < 0.45:
+                continue
+
+            for _ in range(rng.randint(2, 4) if is_dana else rng.randint(1, 2)):
+                ref += 1
+                job = rng.choice(_JOB_MIX)
+                base_minutes = mock_data.JOB_TYPES_BY_CODE[job]["est_minutes"]
+                minutes = base_minutes + rng.choice([-15, -10, 0, 0, 10, 20, 30])
+                modifiers = []
+                if rng.random() < 0.45:
+                    modifiers.append("first_time_fix")
+                if rng.random() < 0.20:
+                    modifiers.append("premium_upsell")
+                if rng.random() < 0.12:
+                    modifiers.append("after_hours")
+                if rng.random() < 0.08:
+                    modifiers.append("adverse_weather")
+
+                status = STATUS_APPROVED
+                note = ""
+                # A few of the other agents leave work awaiting review.
+                if not is_dana and days_back <= 3 and rng.random() < 0.7:
+                    status = STATUS_SUBMITTED
+                logs.append(_entry(counter, agent_id, agent_name, day, job,
+                                   modifiers, minutes, rng.choice(_STREETS),
+                                   status, ref, note))
+
+    # Dana's specific review outcomes, so the UI shows every state.
+    ref += 1
+    logs.append(_entry(counter, 417, "Dana Whitfield", today - timedelta(days=12),
+                       "equipment_swap", [], 35, "47 Hudson St, Columbus",
+                       STATUS_REJECTED, ref,
+                       "Work order WO-2026-0091 already covers this swap."))
+    ref += 1
+    logs.append(_entry(counter, 417, "Dana Whitfield", today - timedelta(days=6),
+                       "aerial_line_work", ["after_hours"], 145,
+                       "5140 Sinclair Rd, Columbus", STATUS_REJECTED, ref,
+                       "After-hours flag needs dispatch approval on file."))
+    ref += 1
+    logs.append(_entry(counter, 417, "Dana Whitfield", today - timedelta(days=3),
+                       "new_install_commercial", ["premium_upsell"], 165,
+                       "760 Kenny Rd, Columbus", STATUS_CHANGES, ref,
+                       "Add the suite number to the work order and resubmit."))
+
+    # Two drafts from today, ready to submit.
+    ref += 1
+    logs.append(_entry(counter, 417, "Dana Whitfield", today,
+                       "new_install_residential", ["first_time_fix"], 85,
+                       "1420 Neil Ave, Columbus", STATUS_DRAFT, ref))
+    ref += 1
+    logs.append(_entry(counter, 417, "Dana Whitfield", today,
+                       "signal_troubleshoot", ["first_time_fix", "adverse_weather"], 80,
+                       "3307 Indianola Ave, Columbus", STATUS_DRAFT, ref))
+
+    return logs
+
+
 def _seed():
     """The state a fresh process (or a reset) starts from."""
     return {
-        "work_logs": [
-            {"id": 1, "agent_id": 417, "agent_name": "Dana Whitfield", "manager_id": 884,
-             "job_type": "Install", "job_date": "2026-08-24", "hours": 7.5, "overtime": 0.0,
-             "points_claimed": 120, "notes": "Triple-play install, Grandview.",
-             "status": STATUS_APPROVED, "submitted_at": "2026-08-24 17:10",
-             "decided_by": "Marcus Vale", "decided_at": "2026-08-25 08:02",
-             "decision_note": ""},
-            {"id": 2, "agent_id": 417, "agent_name": "Dana Whitfield", "manager_id": 884,
-             "job_type": "Upsell", "job_date": "2026-08-26", "hours": 6.0, "overtime": 1.5,
-             "points_claimed": 90, "notes": "Added mobile line at service call.",
-             "status": STATUS_PENDING, "submitted_at": "2026-08-26 18:40",
-             "decided_by": None, "decided_at": None, "decision_note": ""},
-            {"id": 3, "agent_id": 803, "agent_name": "Ibrahim Cole", "manager_id": 884,
-             "job_type": "Service call", "job_date": "2026-08-26", "hours": 9.0, "overtime": 2.5,
-             "points_claimed": 70, "notes": "Two rollbacks on the same node.",
-             "status": STATUS_PENDING, "submitted_at": "2026-08-26 20:15",
-             "decided_by": None, "decided_at": None, "decision_note": ""},
-            {"id": 4, "agent_id": 521, "agent_name": "Sofia Marchetti", "manager_id": 884,
-             "job_type": "Install", "job_date": "2026-08-27", "hours": 8.5, "overtime": 3.0,
-             "points_claimed": 110, "notes": "Late finish, customer rescheduled twice.",
-             "status": STATUS_PENDING, "submitted_at": "2026-08-27 19:05",
-             "decided_by": None, "decided_at": None, "decision_note": ""},
-            {"id": 5, "agent_id": 288, "agent_name": "Grace Okonkwo", "manager_id": 884,
-             "job_type": "Install", "job_date": "2026-08-21", "hours": 7.0, "overtime": 0.5,
-             "points_claimed": 100, "notes": "",
-             "status": STATUS_REJECTED, "submitted_at": "2026-08-21 17:55",
-             "decided_by": "Marcus Vale", "decided_at": "2026-08-22 09:14",
-             "decision_note": "Job already credited on log #0."},
-        ],
+        "work_logs": _seed_work_logs(),
         "programs": [
             {"id": 1, "name": "Q4 Upsell Accelerator", "owner_id": 884,
              "owner_name": "Marcus Vale", "team": "Columbus North",
@@ -99,6 +215,10 @@ def _seed():
     }
 
 
+def _stamp():
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
 STORE = _seed()
 _ids = {
     "work_logs": itertools.count(max(l["id"] for l in STORE["work_logs"]) + 1),
@@ -118,59 +238,168 @@ def reset_store():
 
 
 # --- Work logs -------------------------------------------------------------
-def get_logs_for_agent(agent_id):
+def get_entries_for_agent(agent_id, on_date=None):
+    """An agent's entries, newest first. Optionally limited to one date."""
     with _LOCK:
-        return copy.deepcopy([l for l in STORE["work_logs"] if l["agent_id"] == agent_id])
+        entries = [l for l in STORE["work_logs"] if l["agent_id"] == agent_id]
+        if on_date:
+            entries = [l for l in entries if l["date"] == on_date]
+        entries.sort(key=lambda l: (l["date"], l["id"]), reverse=True)
+        return copy.deepcopy(entries)
 
 
-def get_logs_for_manager(manager_id, status=None):
+def get_entry(entry_id):
     with _LOCK:
-        logs = [l for l in STORE["work_logs"] if l["manager_id"] == manager_id]
-        if status:
-            logs = [l for l in logs if l["status"] == status]
-        return copy.deepcopy(logs)
+        return copy.deepcopy(
+            next((l for l in STORE["work_logs"] if l["id"] == entry_id), None))
 
 
-def get_pending_logs_for_manager(manager_id):
-    return get_logs_for_manager(manager_id, status=STATUS_PENDING)
-
-
-def count_pending_logs_for_manager(manager_id):
+def add_entry(agent_id, agent_name, manager_id, on_date, job_type, work_order_ref,
+              address_line, duration_minutes, modifiers, notes="",
+              status=STATUS_DRAFT):
+    """Create an entry. Points are always recalculated here — a caller's
+    number is never trusted."""
     with _LOCK:
-        return sum(
-            1 for l in STORE["work_logs"]
-            if l["manager_id"] == manager_id and l["status"] == STATUS_PENDING
-        )
-
-
-def add_log(agent_id, agent_name, manager_id, job_type, job_date, hours,
-            overtime, points_claimed, notes=""):
-    with _LOCK:
-        log = {
+        entry = {
             "id": next(_ids["work_logs"]),
-            "agent_id": agent_id, "agent_name": agent_name, "manager_id": manager_id,
-            "job_type": job_type, "job_date": job_date,
-            "hours": hours, "overtime": overtime, "points_claimed": points_claimed,
-            "notes": notes, "status": STATUS_PENDING,
-            "submitted_at": date.today().isoformat(),
-            "decided_by": None, "decided_at": None, "decision_note": "",
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "manager_id": manager_id,
+            "date": on_date,
+            "job_type": job_type,
+            "work_order_ref": work_order_ref,
+            "address_line": address_line,
+            "duration_minutes": duration_minutes,
+            "modifiers": list(modifiers or []),
+            "notes": notes,
+            "points": mock_data.calculate_points(job_type, modifiers),
+            "status": status,
+            "submitted_at": _stamp() if status == STATUS_SUBMITTED else None,
+            "reviewed_at": None,
+            "reviewer_id": None,
+            "review_note": "",
         }
-        STORE["work_logs"].append(log)
-        return copy.deepcopy(log)
+        STORE["work_logs"].append(entry)
+        return copy.deepcopy(entry)
 
 
-def update_log_status(log_id, status, decided_by, decision_note=""):
-    """Approve or reject a log. Returns the updated copy, or None if unknown."""
-    if status not in (STATUS_APPROVED, STATUS_REJECTED, STATUS_PENDING):
-        raise ValueError(f"unknown status: {status}")
+def update_entry(entry_id, agent_id, **fields):
+    """Edit an entry the agent owns, only while it is editable.
+
+    Returns the updated copy, or None when the entry is missing, owned by
+    someone else, or locked (submitted / approved / rejected).
+    """
+    allowed = {"job_type", "work_order_ref", "address_line",
+               "duration_minutes", "modifiers", "notes"}
     with _LOCK:
-        for log in STORE["work_logs"]:
-            if log["id"] == log_id:
-                log["status"] = status
-                log["decided_by"] = decided_by
-                log["decided_at"] = date.today().isoformat()
-                log["decision_note"] = decision_note
-                return copy.deepcopy(log)
+        for entry in STORE["work_logs"]:
+            if entry["id"] != entry_id or entry["agent_id"] != agent_id:
+                continue
+            if entry["status"] not in EDITABLE_STATUSES:
+                return None
+            for key, value in fields.items():
+                if key in allowed:
+                    entry[key] = list(value) if key == "modifiers" else value
+            entry["points"] = mock_data.calculate_points(
+                entry["job_type"], entry["modifiers"])
+            # An edit after changes_requested puts it back in the agent's hands.
+            if entry["status"] == STATUS_CHANGES:
+                entry["status"] = STATUS_DRAFT
+            return copy.deepcopy(entry)
+    return None
+
+
+def delete_entry(entry_id, agent_id):
+    """Delete a draft the agent owns. Only drafts may be deleted."""
+    with _LOCK:
+        for index, entry in enumerate(STORE["work_logs"]):
+            if entry["id"] == entry_id and entry["agent_id"] == agent_id:
+                if entry["status"] != STATUS_DRAFT:
+                    return False
+                del STORE["work_logs"][index]
+                return True
+    return False
+
+
+def submit_day(agent_id, on_date):
+    """Move every draft on a date to submitted. Returns (count, points)."""
+    with _LOCK:
+        count = 0
+        points = 0
+        stamp = _stamp()
+        for entry in STORE["work_logs"]:
+            if (entry["agent_id"] == agent_id and entry["date"] == on_date
+                    and entry["status"] == STATUS_DRAFT):
+                entry["status"] = STATUS_SUBMITTED
+                entry["submitted_at"] = stamp
+                count += 1
+                points += entry["points"]
+        return count, points
+
+
+def day_summary(agent_id, on_date):
+    """Totals for one day plus what is still sitting in draft."""
+    with _LOCK:
+        entries = [l for l in STORE["work_logs"]
+                   if l["agent_id"] == agent_id and l["date"] == on_date]
+        drafts = [l for l in entries if l["status"] == STATUS_DRAFT]
+        submitted = [l for l in entries if l["status"] == STATUS_SUBMITTED]
+        return {
+            "jobs": len(entries),
+            "minutes": sum(l["duration_minutes"] for l in entries),
+            "points": sum(l["points"] for l in entries),
+            "draft_count": len(drafts),
+            "draft_points": sum(l["points"] for l in drafts),
+            "submitted_at": submitted[0]["submitted_at"] if submitted else None,
+        }
+
+
+def agent_points_summary(agent_id):
+    """Banked vs awaiting review, for the dollar ledger."""
+    with _LOCK:
+        entries = [l for l in STORE["work_logs"] if l["agent_id"] == agent_id]
+        return {
+            "approved_points": sum(l["points"] for l in entries
+                                   if l["status"] == STATUS_APPROVED),
+            "pending_points": sum(l["points"] for l in entries
+                                  if l["status"] == STATUS_SUBMITTED),
+        }
+
+
+def get_submitted_for_manager(manager_id):
+    """The manager's review queue, oldest submission first."""
+    with _LOCK:
+        entries = [l for l in STORE["work_logs"]
+                   if l["manager_id"] == manager_id and l["status"] == STATUS_SUBMITTED]
+        entries.sort(key=lambda l: (l["submitted_at"] or "", l["id"]))
+        return copy.deepcopy(entries)
+
+
+def count_submitted_for_manager(manager_id):
+    with _LOCK:
+        return sum(1 for l in STORE["work_logs"]
+                   if l["manager_id"] == manager_id and l["status"] == STATUS_SUBMITTED)
+
+
+# Older call sites used the "pending" vocabulary.
+get_pending_logs_for_manager = get_submitted_for_manager
+count_pending_logs_for_manager = count_submitted_for_manager
+
+
+def review_entry(entry_id, status, reviewer_id, note=""):
+    """Approve, reject, or send an entry back for changes."""
+    if status not in (STATUS_APPROVED, STATUS_REJECTED, STATUS_CHANGES):
+        raise ValueError(f"unknown review status: {status}")
+    with _LOCK:
+        for entry in STORE["work_logs"]:
+            if entry["id"] == entry_id:
+                if entry["status"] != STATUS_SUBMITTED:
+                    return None
+                entry["status"] = status
+                entry["reviewer_id"] = reviewer_id
+                entry["reviewed_at"] = _stamp()
+                entry["review_note"] = note
+                return copy.deepcopy(entry)
     return None
 
 
@@ -255,22 +484,68 @@ def mark_notification_read(notification_id):
 
 
 if __name__ == "__main__":
+    import os, django
     reset_store()
-    assert count_pending_logs_for_manager(884) == 3
-    assert len(get_logs_for_agent(417)) == 2
+    today = date.today().isoformat()
+
+    dana = get_entries_for_agent(417)
+    assert len(dana) > 40, "three weeks of history"
+    drafts = [e for e in dana if e["status"] == STATUS_DRAFT]
+    assert len(drafts) == 2, "two drafts from today"
+    assert all(e["date"] == today for e in drafts)
+    assert sum(1 for e in dana if e["status"] == STATUS_REJECTED) == 2
+    assert sum(1 for e in dana if e["status"] == STATUS_CHANGES) == 1
+    assert count_submitted_for_manager(884) >= 5, "queue has content from other agents"
+
+    # Reads hand back copies.
+    dana[0]["points"] = 99999
+    assert get_entries_for_agent(417)[0]["points"] != 99999
+
+    # Points are recalculated on write, never taken from the caller.
+    entry = add_entry(417, "Dana Whitfield", 884, today, "new_install_residential",
+                      "WO-2026-9001", "1 Test St, Columbus", 90,
+                      ["first_time_fix", "premium_upsell"])
+    assert entry["points"] == 168 == mock_data.calculate_points(
+        "new_install_residential", ["first_time_fix", "premium_upsell"])
+
+    # Editing a draft recalculates.
+    updated = update_entry(entry["id"], 417, modifiers=["safety_flagged"])
+    assert updated["points"] == 0, "safety flag zeroes it"
+
+    # Ownership is enforced in the store, not just the view.
+    assert update_entry(entry["id"], 999, notes="hack") is None
+    assert delete_entry(entry["id"], 999) is False
+
+    # Submitting locks the entry.
+    before = count_submitted_for_manager(884)
+    count, points = submit_day(417, today)
+    assert count == 3, count                    # 2 seeded drafts + the new one
+    assert count_submitted_for_manager(884) == before + 3
+    assert update_entry(entry["id"], 417, notes="late edit") is None, "submitted is locked"
+    assert delete_entry(entry["id"], 417) is False
+
+    # changes_requested reopens it for editing.
+    sent_back = review_entry(entry["id"], STATUS_CHANGES, 884, "Add the suite number.")
+    assert sent_back["status"] == STATUS_CHANGES
+    assert sent_back["review_note"] == "Add the suite number."
+    reopened = update_entry(entry["id"], 417, notes="fixed")
+    assert reopened["status"] == STATUS_DRAFT, "editable again"
+    assert reopened["review_note"] == "Add the suite number.", "reviewer note preserved"
+
+    # Only submitted entries can be reviewed.
+    assert review_entry(entry["id"], STATUS_APPROVED, 884) is None
+
+    # Ledger split
+    summary = agent_points_summary(417)
+    assert summary["approved_points"] > 0 and summary["pending_points"] > 0
+    assert summary["approved_points"] != summary["pending_points"]
+
+    # Day summary
+    day = day_summary(417, today)
+    assert day["jobs"] >= 3 and day["minutes"] > 0
+
+    # Programs still work
     assert count_pending_programs() == 2
-
-    # Helpers hand back copies — mutating a result must not touch the store.
-    logs = get_logs_for_agent(417)
-    logs[0]["points_claimed"] = 99999
-    assert get_logs_for_agent(417)[0]["points_claimed"] != 99999
-
-    log = add_log(417, "Dana Whitfield", 884, "Install", "2026-08-28", 8.0, 1.0, 130, "test")
-    assert count_pending_logs_for_manager(884) == 4
-    assert update_log_status(log["id"], STATUS_APPROVED, "Marcus Vale")["status"] == "approved"
-    assert count_pending_logs_for_manager(884) == 3
-    assert update_log_status(99999, STATUS_APPROVED, "x") is None
-
     program = add_program("Test", 884, "Marcus Vale", "Columbus North", 1000, 1.1,
                           "2026-09-01", "2026-09-30", "test")
     assert count_pending_programs() == 3
@@ -281,6 +556,7 @@ if __name__ == "__main__":
     assert len(get_notifications(417, unread_only=True)) == 1
 
     reset_store()
-    assert count_pending_logs_for_manager(884) == 3, "reset restores seed"
+    assert len([e for e in get_entries_for_agent(417)
+                if e["status"] == STATUS_DRAFT]) == 2, "reset restores seed"
     assert get_notifications(417) == []
     print("store OK")

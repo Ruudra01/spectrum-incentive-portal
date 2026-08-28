@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -61,6 +62,14 @@ def agent_dashboard(request):
 
     # Tier and next-tier progress are precomputed per row so the expandable
     # detail panels ship server-rendered and the JS only toggles them.
+    points_summary = store.agent_points_summary(agent["id"])
+    ledger = {
+        "approved_points": points_summary["approved_points"],
+        "approved_usd": mock_data.points_to_usd(points_summary["approved_points"]),
+        "pending_points": points_summary["pending_points"],
+        "pending_usd": mock_data.points_to_usd(points_summary["pending_points"]),
+    }
+
     rows = [
         dict(
             entry,
@@ -90,6 +99,23 @@ def agent_dashboard(request):
             "weekly_points": mock_data.WEEKLY_POINTS,
             "sparkline": _sparkline(mock_data.WEEKLY_POINTS),
             "faq": chat_responses.FAQ_RESPONSES,
+            # Ledger
+            "ledger": ledger,
+            "point_value": mock_data.POINT_VALUE_USD,
+            "next_payout": mock_data.NEXT_PAYOUT_DATE,
+            # Simulator mirrors the same job/tier numbers the server uses.
+            "sim_data": json.dumps({
+                "points": agent["points"],
+                "rate": mock_data.POINT_VALUE_USD,
+                "tiers": [
+                    {"name": t["name"], "slug": t["slug"], "min": t["min_points"]}
+                    for t in mock_data.TIERS
+                ],
+                "jobs": [
+                    {"code": j["code"], "label": j["label"], "points": j["base_points"]}
+                    for j in mock_data.JOB_TYPES
+                ],
+            }),
         },
     )
 
@@ -115,6 +141,13 @@ def faqs(request):
     """FAQ page. Content is the same FAQ_RESPONSES the chatbot answers from,
     so the page and the assistant can never disagree."""
     return render(request, "dashboard/faqs.html", {"faq": chat_responses.FAQ_RESPONSES})
+
+
+def _int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _safe_next(raw):
@@ -293,10 +326,107 @@ def _placeholder(request, title, blurb):
     return render(request, "dashboard/placeholder.html", {"title": title, "blurb": blurb})
 
 
+def _agent_ctx(request):
+    """The signed-in agent's identity, straight from DEMO_ACCOUNTS."""
+    account = mock_data.DEMO_ACCOUNTS[request.session["user_email"]]
+    return account["profile"]
+
+
 @role_required(mock_data.ROLE_AGENT)
 def log_work(request):
-    return _placeholder(request, "Log Work",
-                        "Submit jobs, hours and points for your manager to approve.")
+    """Daily work log. One endpoint handles add / edit / delete / submit."""
+    agent = _agent_ctx(request)
+    today = date.today().isoformat()
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        # Future days can't be logged; clamp anything the client sends.
+        on_date = (request.POST.get("date") or today)[:10]
+        if on_date > today:
+            on_date = today
+        back = f"{reverse('dashboard:log_work')}?date={on_date}"
+
+        if action == "submit_day":
+            count, points = store.submit_day(agent["id"], on_date)
+            if count:
+                return redirect(f"{back}&submitted={count}&pts={points}")
+            return redirect(back)
+
+        if action == "delete":
+            store.delete_entry(_int(request.POST.get("entry_id")), agent["id"])
+            return redirect(f"{back}&deleted=1")
+
+        # add / update share the same cleaned payload
+        fields = {
+            "job_type": request.POST.get("job_type", ""),
+            "work_order_ref": (request.POST.get("work_order_ref") or "").strip()[:32],
+            "address_line": (request.POST.get("address_line") or "").strip()[:120],
+            "duration_minutes": max(0, min(_int(request.POST.get("duration_minutes")), 1440)),
+            "modifiers": [m for m in request.POST.getlist("modifiers")
+                          if m in mock_data.POINT_MODIFIERS_BY_CODE],
+            "notes": (request.POST.get("notes") or "").strip()[:280],
+        }
+        if fields["job_type"] not in mock_data.JOB_TYPES_BY_CODE:
+            return redirect(f"{back}&error=job")
+
+        if action == "update":
+            store.update_entry(_int(request.POST.get("entry_id")), agent["id"], **fields)
+            return redirect(f"{back}&saved=1")
+
+        # Points are computed in the store, never taken from the form.
+        store.add_entry(
+            agent["id"], agent["name"], agent["manager_id"], on_date,
+            status=(store.STATUS_SUBMITTED if action == "add_submit" else store.STATUS_DRAFT),
+            **fields,
+        )
+        return redirect(f"{back}&saved=1")
+
+    # --- GET ---
+    on_date = (request.GET.get("date") or today)[:10]
+    if on_date > today:
+        on_date = today
+
+    entries = store.get_entries_for_agent(agent["id"], on_date)
+    for entry in entries:
+        entry["job"] = mock_data.JOB_TYPES_BY_CODE.get(entry["job_type"], {})
+        entry["modifier_details"] = [
+            mock_data.POINT_MODIFIERS_BY_CODE[m] for m in entry["modifiers"]
+            if m in mock_data.POINT_MODIFIERS_BY_CODE
+        ]
+        entry["status_label"] = store.STATUS_LABELS.get(entry["status"], entry["status"])
+        entry["editable"] = entry["status"] in store.EDITABLE_STATUSES
+        entry["reviewer_name"] = mock_data.MANAGER_PROFILE["name"] if entry["reviewer_id"] else ""
+
+    summary = store.day_summary(agent["id"], on_date)
+    summary["dollars"] = mock_data.points_to_usd(summary["points"])
+
+    return render(request, "dashboard/log_work.html", {
+        "on_date": on_date,
+        "today": today,
+        "entries": entries,
+        "summary": summary,
+        "job_types": mock_data.JOB_TYPES,
+        "job_groups": [
+            {"name": group,
+             "jobs": [j for j in mock_data.JOB_TYPES if j["group"] == group]}
+            for group in mock_data.JOB_TYPE_GROUPS
+        ],
+        "modifiers": [m for m in mock_data.POINT_MODIFIERS
+                      if m["code"] != mock_data.SAFETY_MODIFIER],
+        "safety_modifier": mock_data.POINT_MODIFIERS_BY_CODE[mock_data.SAFETY_MODIFIER],
+        # The browser mirrors calculate_points from this, so the two can't drift.
+        "calc_data": json.dumps({
+            "jobs": {j["code"]: j["base_points"] for j in mock_data.JOB_TYPES},
+            "minutes": {j["code"]: j["est_minutes"] for j in mock_data.JOB_TYPES},
+            "modifiers": {m["code"]: m["multiplier"] for m in mock_data.POINT_MODIFIERS},
+            "safety": mock_data.SAFETY_MODIFIER,
+        }),
+        "manager_name": mock_data.MANAGER_PROFILE["name"],
+        "saved": request.GET.get("saved") == "1",
+        "deleted": request.GET.get("deleted") == "1",
+        "submitted_count": _int(request.GET.get("submitted")),
+    })
+
 
 
 @role_required(mock_data.ROLE_MANAGER)

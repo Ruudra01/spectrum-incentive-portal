@@ -25,7 +25,7 @@ is unused; Django's built-in apps are installed but nothing here reads them.
 |---|---|---|
 | `/` | `landing` | Marketing page: tier explorer + avatar guide |
 | `/dashboard/` | `dashboard` | Field agent dashboard |
-| `/log-work/` | `log_work` | Agent work-log submission *(stub)* |
+| `/log-work/` | `log_work` | Agent daily work log — add, edit, submit for approval |
 | `/manager/` | `manager_team` | Manager team view *(stub)* |
 | `/manager/programs/` | `manager_programs` | Manager programs *(stub)* |
 | `/manager/approvals/` | `manager_approvals` | Manager approvals *(stub)* |
@@ -125,7 +125,8 @@ The official Spectrum values, defined as custom properties in `spectrum.css`:
 | `--sp-text` | `#212121` | body copy |
 | `--sp-muted` | `#5A6472` | secondary text |
 | `--sp-border` | `#E1E6ED` | hairlines |
-| `--sp-error` | `#B42318` | form validation only — the one warranted red |
+| `--sp-error` | `#B42318` | form validation and rejected state |
+| `--sp-warning` | `#B25E09` | changes-requested state and the safety flag |
 
 Bootstrap's `--bs-primary` and `--bs-link-color` are overridden to `--sp-blue`.
 
@@ -324,6 +325,70 @@ mute dims and disables the toggles **without** clearing what is stored, so
 switching it back off restores exactly what was set. Preferences read from the
 session with the `mock_data` defaults as fallback.
 
+## Work logging
+
+The agent's daily log at `/log-work/` is what makes the portal solve a real
+field problem rather than display numbers.
+
+### How points are calculated
+
+`mock_data.calculate_points(job_type, modifiers)` is the **single source of
+truth**. Nine job types carry base points and estimated minutes; five modifiers
+apply on top, each delta computed off the base and added, so the preview can
+show one line per modifier:
+
+| Modifier | Effect | |
+|---|---|---|
+| First-time fix | +15% | resolved without a follow-up visit |
+| Premium upsell | +25% | customer took a premium add-on |
+| After hours | +20% | outside the standard window |
+| **Weather protected** | +15% | storm, snow, extreme heat — pay is protected, not penalised |
+| **Safety flagged** | −100% | PPE or ladder protocol missed; zeroes the entry |
+
+`safety_flagged` short-circuits and returns 0 whatever else is applied, and its
+chip sits below a divider with a confirmation step so it can't be a stray click.
+
+The browser mirrors this from `JOB_TYPES` / `POINT_MODIFIERS` handed over as JSON
+in a data attribute — nothing is hardcoded twice. One subtlety: Python's `round()`
+rounds halves to even while JS `Math.round` goes half-up, which would silently
+drift the two apart, so the server uses `floor(x + 0.5)` to match. All **288**
+job × modifier combinations were compared between the two implementations and
+agree exactly. **The server always recalculates on write** — a points value in
+the POST body is ignored.
+
+### Lifecycle
+
+```
+draft → submitted → approved | rejected | changes_requested
+```
+
+Only `draft` and `changes_requested` are editable, and ownership is enforced in
+`store.py` rather than the view — `update_entry` and `delete_entry` take an
+`agent_id` and refuse entries owned by anyone else. `changes_requested` returns
+an entry to editable while **preserving** the reviewer's note.
+
+Submitting a day moves every draft on that date to `submitted` and routes it to
+the agent's manager, where it shows up in the Approvals badge count. Future dates
+are blocked in both the date picker (`max`) and the view.
+
+## Point-to-dollar ledger
+
+`POINT_VALUE_USD = 0.18` — the demo conversion rate. Real rates vary by program
+and region; this one number stands in for that whole table.
+
+The dashboard ledger separates **approved** points (banked, shown as the headline
+dollar figure) from **submitted-but-unreviewed** points, styled distinctly so the
+agent can see what isn't theirs yet. A "How this is calculated" disclosure states
+the actual rate.
+
+## What-if simulator
+
+A slider and job-type selector on the dashboard project points, tier and dollar
+value for extra work this month, calling out a tier crossover when the projection
+crosses a `mock_data` threshold. Verified the crossover fires at the exact
+boundary: from 3,180 points, 15 residential installs leaves 4,980 (Silver) and
+16 reaches 5,100 (Gold).
+
 ## Interactive features
 
 - **Tier explorer** (landing) — ARIA tablist, 200ms panel crossfade, sliding 2px
@@ -381,7 +446,6 @@ The role foundation — accounts, routing, access control, the shared store and
 the role-aware profile and notification pages — is in place. The seven feature
 routes render "coming in the next pass" stubs and are filled in by later passes:
 
-- **Agent** — `/log-work/`: submit jobs, hours and points for approval.
 - **Manager** — `/manager/` roster and drill-down, `/manager/programs/` program
   builder, `/manager/approvals/` work-log review queue.
 - **Director** — `/director/` territory rollups, `/director/programs/` spend

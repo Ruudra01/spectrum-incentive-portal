@@ -1,0 +1,523 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Log Work — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    <header class="sp-page-header">
+      <div class="sp-log-head">
+        <div>
+          <h1>Log work</h1>
+          <p class="sp-muted sp-small mb-0 mt-1">Record each job as you finish it. Submit the day when you're done.</p>
+        </div>
+      </div>
+      <form method="get" class="ms-auto">
+        <label class="sp-label" for="spDate">Day</label>
+        <input class="sp-control sp-log-date" type="date" id="spDate" name="date"
+               value="{{ on_date }}" max="{{ today }}" onchange="this.form.submit()">
+      </form>
+    </header>
+
+    <div class="row g-3 mt-1">
+
+      {# ---------------- LEFT: the day's entries ---------------- #}
+      <div class="col-lg-7">
+
+        <div class="sp-daystrip">
+          <div class="sp-daystat">
+            <p class="sp-daystat-value mb-0" data-count="{{ summary.jobs }}">0</p>
+            <p class="sp-daystat-label">Jobs</p>
+          </div>
+          <div class="sp-daystat">
+            <p class="sp-daystat-value mb-0" data-count="{{ summary.minutes }}">0</p>
+            <p class="sp-daystat-label">Minutes</p>
+          </div>
+          <div class="sp-daystat">
+            <p class="sp-daystat-value mb-0" data-count="{{ summary.points }}">0</p>
+            <p class="sp-daystat-label">Points</p>
+          </div>
+          <div class="sp-daystat">
+            <p class="sp-daystat-value mb-0">$<span data-count="{{ summary.dollars|floatformat:2 }}" data-count-decimals="2">0</span></p>
+            <p class="sp-daystat-label">Est. value</p>
+          </div>
+        </div>
+
+        {% if summary.submitted_at %}
+        <p class="sp-awaiting mb-3">Awaiting review &middot; submitted {{ summary.submitted_at }}</p>
+        {% endif %}
+
+        {% for entry in entries %}
+        <div class="sp-card sp-entry" id="entry-{{ entry.id }}">
+          <div class="sp-entry-top">
+            <div>
+              <p class="sp-entry-title">{{ entry.job.label }}</p>
+              <p class="sp-entry-meta">
+                {{ entry.work_order_ref }} &middot; {{ entry.address_line }} &middot; {{ entry.duration_minutes }} min
+              </p>
+            </div>
+            <div class="sp-entry-points">
+              <p class="sp-entry-points-value mb-1">{{ entry.points }}</p>
+              <span class="sp-status sp-status-{{ entry.status }}">
+                {% if entry.status == 'approved' %}&#10003; {% endif %}{{ entry.status_label }}
+              </span>
+            </div>
+          </div>
+
+          {% if entry.modifier_details %}
+          <div class="sp-entry-chips">
+            {% for mod in entry.modifier_details %}
+            <span class="sp-mod-body">{{ mod.label }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if entry.review_note %}
+          <div class="sp-review-note {% if entry.status == 'rejected' %}sp-review-note-rejected{% endif %}">
+            {{ entry.review_note }}
+            <p class="sp-review-who mb-0">{{ entry.reviewer_name }} &middot; {{ entry.reviewed_at }}</p>
+          </div>
+          {% endif %}
+
+          {% if entry.editable %}
+          <div class="sp-entry-actions">
+            <button type="button" class="btn-sp-secondary sp-btn-sm sp-edit-entry"
+                    data-entry="{{ entry.id }}"
+                    data-job="{{ entry.job_type }}"
+                    data-ref="{{ entry.work_order_ref }}"
+                    data-address="{{ entry.address_line }}"
+                    data-duration="{{ entry.duration_minutes }}"
+                    data-modifiers="{{ entry.modifiers|join:"," }}"
+                    data-notes="{{ entry.notes }}">Edit</button>
+            <button type="button" class="btn-sp-secondary sp-btn-sm sp-ask-delete"
+                    data-entry="{{ entry.id }}">Delete</button>
+          </div>
+          <div class="sp-undo-bar" id="confirm-{{ entry.id }}" hidden>
+            <span>Delete this entry?</span>
+            <form method="post" class="ms-auto d-flex gap-2">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="entry_id" value="{{ entry.id }}">
+              <input type="hidden" name="date" value="{{ on_date }}">
+              <button type="button" class="btn-sp-secondary sp-cancel-delete" data-entry="{{ entry.id }}">Keep</button>
+              <button type="submit" class="btn-sp-primary">Delete</button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+        {% empty %}
+        <div class="sp-card sp-empty-card">
+          <h2 class="mb-2">No work logged for this day</h2>
+          <p class="sp-muted mb-4">Add your first job using the form.</p>
+          <button type="button" class="btn-sp-primary" id="spFocusForm">Add an entry</button>
+        </div>
+        {% endfor %}
+
+        {% if summary.draft_count %}
+        <div class="sp-submitbar" id="spSubmitBar">
+          <span class="sp-submitbar-text">
+            {{ summary.draft_count }} entr{{ summary.draft_count|pluralize:"y,ies" }} ready to submit
+            &middot; {{ summary.draft_points }} points
+          </span>
+          <button type="button" class="btn-sp-primary" id="spOpenSubmit">Submit day for approval</button>
+        </div>
+        {% endif %}
+      </div>
+
+      {# ---------------- RIGHT: add entry ---------------- #}
+      <div class="col-lg-5">
+        <div class="sp-card p-4 sp-form-sticky" id="spEntryCard" data-calc="{{ calc_data }}">
+          <h2 class="mb-3" id="spFormTitle">Add an entry</h2>
+
+          <form method="post" id="spEntryForm" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add" id="spAction">
+            <input type="hidden" name="entry_id" value="" id="spEntryId">
+            <input type="hidden" name="date" value="{{ on_date }}">
+
+            <div class="sp-field">
+              <label class="sp-label" for="spJobType">Job type</label>
+              <select class="sp-control" id="spJobType" name="job_type" required>
+                <option value="">Choose a job type</option>
+                {% for group in job_groups %}
+                <optgroup label="{{ group.name }}">
+                  {% for job in group.jobs %}
+                  <option value="{{ job.code }}">{{ job.label }}</option>
+                  {% endfor %}
+                </optgroup>
+                {% endfor %}
+              </select>
+              <p class="sp-muted sp-small mb-0 mt-1" id="spJobHint"></p>
+              <p class="sp-field-error" id="spJobError" hidden></p>
+            </div>
+
+            <div class="sp-field">
+              <label class="sp-label" for="spRef">Work order</label>
+              <input class="sp-control" type="text" id="spRef" name="work_order_ref"
+                     placeholder="WO-2026-0148" required>
+              <p class="sp-field-error" id="spRefError" hidden></p>
+            </div>
+
+            <div class="sp-field">
+              <label class="sp-label" for="spAddress">Address</label>
+              <input class="sp-control" type="text" id="spAddress" name="address_line"
+                     placeholder="Street and city" required>
+              <p class="sp-field-error" id="spAddressError" hidden></p>
+            </div>
+
+            <div class="sp-field">
+              <label class="sp-label" for="spDuration">Duration (minutes)</label>
+              <div class="d-flex gap-2">
+                <input class="sp-control" type="number" id="spDuration" name="duration_minutes"
+                       min="1" max="1440" step="1" required>
+                <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="15">+15</button>
+                <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="30">+30</button>
+              </div>
+              <p class="sp-field-error" id="spDurationError" hidden></p>
+            </div>
+
+            <div class="sp-field">
+              <span class="sp-label">Modifiers</span>
+              <div class="sp-mods">
+                {% for mod in modifiers %}
+                <label class="sp-mod" title="{{ mod.description }}">
+                  <input type="checkbox" name="modifiers" value="{{ mod.code }}"
+                         data-multiplier="{{ mod.multiplier }}">
+                  <span class="sp-mod-body">
+                    {% if mod.code == 'adverse_weather' %}
+                    <svg class="sp-mod-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z"/>
+                    </svg>
+                    {% endif %}
+                    {{ mod.label }}
+                    <span class="sp-mod-effect">+{{ mod.multiplier|floatformat:0 }}0%</span>
+                  </span>
+                </label>
+                {% endfor %}
+              </div>
+
+              <hr class="sp-safety-divider">
+              <div class="sp-mods">
+                <label class="sp-mod sp-mod-safety" title="{{ safety_modifier.description }}">
+                  <input type="checkbox" name="modifiers" value="{{ safety_modifier.code }}"
+                         id="spSafety" data-multiplier="-1">
+                  <span class="sp-mod-body">
+                    {{ safety_modifier.label }}
+                    <span class="sp-mod-effect">&minus;100%</span>
+                  </span>
+                </label>
+              </div>
+              <div class="sp-safety-confirm" id="spSafetyConfirm" hidden>
+                This zeroes the entry's points. {{ safety_modifier.description }}
+                <div class="d-flex gap-2 mt-2">
+                  <button type="button" class="btn-sp-secondary sp-btn-sm" id="spSafetyCancel">Cancel</button>
+                  <button type="button" class="btn-sp-secondary sp-btn-sm" id="spSafetyConfirmBtn">Apply anyway</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="sp-field">
+              <label class="sp-label" for="spNotes">Notes <span class="sp-muted">(optional)</span></label>
+              <textarea class="sp-control" id="spNotes" name="notes" rows="2" maxlength="280"></textarea>
+              <p class="sp-muted sp-small mb-0 mt-1"><span id="spNotesCount">0</span>/280</p>
+            </div>
+
+            {# Live preview — recalculated from the same numbers the server uses. #}
+            <div class="sp-preview" id="spPreview" aria-live="polite">
+              <div class="sp-preview-line"><span>Base points</span><span id="spBase">0</span></div>
+              <div id="spPreviewMods"></div>
+              <div class="sp-preview-total">
+                <span class="sp-label mb-0">Total</span>
+                <span class="sp-preview-total-value" id="spTotal">0</span>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 mt-3">
+              <button type="submit" class="btn-sp-secondary" id="spSaveDraft">Save as draft</button>
+              <button type="submit" class="btn-sp-primary" id="spSaveSubmit">Save &amp; submit</button>
+              <button type="button" class="btn-sp-secondary" id="spCancelEdit" hidden>Cancel edit</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Submit-day confirmation #}
+<div class="sp-modal-scrim" id="spSubmitScrim" hidden>
+  <div class="sp-modal" role="dialog" aria-modal="true" aria-labelledby="spSubmitTitle">
+    <h2 id="spSubmitTitle">Submit {{ summary.draft_count }} entr{{ summary.draft_count|pluralize:"y,ies" }}?</h2>
+    <p class="sp-muted sp-small mb-0 mt-1">Going to {{ manager_name }} for approval.</p>
+    <ul class="sp-modal-list">
+      {% for entry in entries %}{% if entry.status == 'draft' %}
+      <li><span>{{ entry.job.label }}</span><span>{{ entry.points }} pts</span></li>
+      {% endif %}{% endfor %}
+      <li><strong>Total</strong><span><strong>{{ summary.draft_points }} pts</strong></span></li>
+    </ul>
+    <p class="sp-muted sp-small">Submitted entries can't be edited until your manager responds.</p>
+    <form method="post" class="sp-modal-actions">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="submit_day">
+      <input type="hidden" name="date" value="{{ on_date }}">
+      <button type="button" class="btn-sp-secondary" id="spCloseSubmit">Cancel</button>
+      <button type="submit" class="btn-sp-primary">Submit for approval</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Work log. The preview mirrors calculate_points using values handed over
+     as JSON, so the browser and the server can never drift apart. */
+  (function () {
+    var CALC = JSON.parse(document.getElementById("spEntryCard").dataset.calc);
+    var form = document.getElementById("spEntryForm");
+    var jobType = document.getElementById("spJobType");
+    var jobHint = document.getElementById("spJobHint");
+    var duration = document.getElementById("spDuration");
+    var notes = document.getElementById("spNotes");
+    var notesCount = document.getElementById("spNotesCount");
+    var preview = document.getElementById("spPreview");
+    var baseEl = document.getElementById("spBase");
+    var modsEl = document.getElementById("spPreviewMods");
+    var totalEl = document.getElementById("spTotal");
+    var safety = document.getElementById("spSafety");
+    var safetyConfirm = document.getElementById("spSafetyConfirm");
+    var shownTotal = 0;
+
+    function checkedModifiers() {
+      return Array.prototype.slice
+        .call(form.querySelectorAll('input[name="modifiers"]:checked'))
+        .map(function (input) { return input.value; });
+    }
+
+    /* Same algorithm as mock_data.calculate_points: each delta off the base,
+       added; Math.round matches Python's floor(x + 0.5). */
+    function computeTotal(code, modifiers) {
+      var base = CALC.jobs[code];
+      if (base === undefined) return { base: 0, lines: [], total: 0, zeroed: false };
+      if (modifiers.indexOf(CALC.safety) > -1) {
+        return { base: base, lines: [], total: 0, zeroed: true };
+      }
+      var lines = [];
+      var total = base;
+      modifiers.forEach(function (m) {
+        var mult = CALC.modifiers[m];
+        if (mult === undefined) return;
+        var delta = Math.round(base * mult);
+        total += delta;
+        lines.push({ code: m, delta: delta, mult: mult });
+      });
+      return { base: base, lines: lines, total: Math.max(total, 0), zeroed: false };
+    }
+
+    var labels = {};
+    form.querySelectorAll('input[name="modifiers"]').forEach(function (input) {
+      labels[input.value] = input.parentNode.querySelector(".sp-mod-body").textContent.trim().split("+")[0].split("−")[0].trim();
+    });
+
+    /* Animate the total between values rather than jumping. */
+    function setTotal(next) {
+      if (SP.reducedMotion) { totalEl.textContent = next; shownTotal = next; return; }
+      var from = shownTotal, start = null;
+      function step(now) {
+        if (start === null) start = now;
+        var p = Math.min((now - start) / 200, 1);
+        totalEl.textContent = Math.round(from + (next - from) * p);
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+      shownTotal = next;
+    }
+
+    function render() {
+      var result = computeTotal(jobType.value, checkedModifiers());
+      baseEl.textContent = result.base;
+      modsEl.innerHTML = "";
+      result.lines.forEach(function (line) {
+        var row = document.createElement("div");
+        row.className = "sp-preview-line sp-preview-mod";
+        var name = document.createElement("span");
+        name.textContent = labels[line.code] || line.code;
+        var value = document.createElement("span");
+        value.textContent = (line.delta >= 0 ? "+" : "") + line.delta;
+        row.appendChild(name); row.appendChild(value);
+        modsEl.appendChild(row);
+      });
+      if (result.zeroed) {
+        var row = document.createElement("div");
+        row.className = "sp-preview-line sp-preview-mod";
+        row.innerHTML = "<span>Safety flagged</span><span>zeroed</span>";
+        modsEl.appendChild(row);
+      }
+      preview.classList.toggle("is-zeroed", result.zeroed);
+      setTotal(result.total);
+    }
+
+    jobType.addEventListener("change", function () {
+      var code = jobType.value;
+      if (CALC.jobs[code] !== undefined) {
+        jobHint.textContent = CALC.jobs[code] + " base points · about " + CALC.minutes[code] + " min";
+        if (!duration.value) duration.value = CALC.minutes[code];
+      } else {
+        jobHint.textContent = "";
+      }
+      render();
+    });
+
+    form.addEventListener("change", function (e) {
+      if (e.target.name === "modifiers") render();
+    });
+
+    /* Safety flag needs a deliberate confirmation — it zeroes the entry. */
+    safety.addEventListener("click", function (e) {
+      if (safety.checked) {
+        e.preventDefault();
+        safety.checked = false;
+        safetyConfirm.hidden = false;
+        document.getElementById("spSafetyConfirmBtn").focus();
+      } else {
+        render();
+      }
+    });
+    document.getElementById("spSafetyConfirmBtn").addEventListener("click", function () {
+      safety.checked = true;
+      safetyConfirm.hidden = true;
+      render();
+    });
+    document.getElementById("spSafetyCancel").addEventListener("click", function () {
+      safety.checked = false;
+      safetyConfirm.hidden = true;
+      safety.focus();
+      render();
+    });
+
+    document.querySelectorAll(".sp-step").forEach(function (button) {
+      button.addEventListener("click", function () {
+        duration.value = (parseInt(duration.value || "0", 10) || 0) + parseInt(button.dataset.step, 10);
+      });
+    });
+
+    notes.addEventListener("input", function () { notesCount.textContent = notes.value.length; });
+
+    /* --- inline validation --- */
+    function setError(input, id, message) {
+      var node = document.getElementById(id);
+      if (message) {
+        node.textContent = message; node.hidden = false;
+        input.classList.add("is-invalid"); input.setAttribute("aria-invalid", "true");
+      } else {
+        node.hidden = true; input.classList.remove("is-invalid"); input.removeAttribute("aria-invalid");
+      }
+      return !message;
+    }
+    function validate() {
+      var ok = setError(jobType, "spJobError", jobType.value ? "" : "Choose a job type.");
+      var ref = document.getElementById("spRef");
+      ok = setError(ref, "spRefError",
+        !ref.value.trim() ? "Enter the work order reference."
+          : (/^WO-\d{4}-\d{3,4}$/i.test(ref.value.trim()) ? "" : "Use the format WO-2026-0148.")) && ok;
+      var address = document.getElementById("spAddress");
+      ok = setError(address, "spAddressError", address.value.trim() ? "" : "Enter the street and city.") && ok;
+      var minutes = parseInt(duration.value, 10);
+      ok = setError(duration, "spDurationError",
+        (minutes > 0 && minutes <= 1440) ? "" : "Enter the duration in minutes.") && ok;
+      return ok;
+    }
+
+    var action = document.getElementById("spAction");
+    document.getElementById("spSaveDraft").addEventListener("click", function () {
+      if (action.value !== "update") action.value = "add";
+    });
+    document.getElementById("spSaveSubmit").addEventListener("click", function () {
+      if (action.value !== "update") action.value = "add_submit";
+    });
+    form.addEventListener("submit", function (e) {
+      if (!validate()) {
+        e.preventDefault();
+        form.querySelector(".is-invalid").focus();
+      }
+    });
+
+    /* --- editing an existing draft --- */
+    var entryId = document.getElementById("spEntryId");
+    var cancelEdit = document.getElementById("spCancelEdit");
+    document.querySelectorAll(".sp-edit-entry").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var d = button.dataset;
+        jobType.value = d.job;
+        document.getElementById("spRef").value = d.ref;
+        document.getElementById("spAddress").value = d.address;
+        duration.value = d.duration;
+        notes.value = d.notes;
+        notesCount.textContent = notes.value.length;
+        var active = d.modifiers ? d.modifiers.split(",") : [];
+        form.querySelectorAll('input[name="modifiers"]').forEach(function (input) {
+          input.checked = active.indexOf(input.value) > -1;
+        });
+        entryId.value = d.entry;
+        action.value = "update";
+        document.getElementById("spFormTitle").textContent = "Edit entry";
+        cancelEdit.hidden = false;
+        jobType.dispatchEvent(new Event("change"));
+        document.getElementById("spEntryCard").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+    cancelEdit.addEventListener("click", function () {
+      form.reset();
+      entryId.value = "";
+      action.value = "add";
+      document.getElementById("spFormTitle").textContent = "Add an entry";
+      cancelEdit.hidden = true;
+      notesCount.textContent = "0";
+      render();
+    });
+
+    /* --- delete confirmation, inline rather than confirm() --- */
+    document.querySelectorAll(".sp-ask-delete").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.getElementById("confirm-" + button.dataset.entry).hidden = false;
+      });
+    });
+    document.querySelectorAll(".sp-cancel-delete").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.getElementById("confirm-" + button.dataset.entry).hidden = true;
+      });
+    });
+
+    /* --- submit day modal --- */
+    var scrim = document.getElementById("spSubmitScrim");
+    var openBtn = document.getElementById("spOpenSubmit");
+    if (openBtn) {
+      openBtn.addEventListener("click", function () {
+        scrim.hidden = false;
+        requestAnimationFrame(function () { scrim.classList.add("is-open"); });
+        document.getElementById("spCloseSubmit").focus();
+      });
+      function closeModal() {
+        scrim.classList.remove("is-open");
+        setTimeout(function () { scrim.hidden = true; }, 180);
+        openBtn.focus();
+      }
+      document.getElementById("spCloseSubmit").addEventListener("click", closeModal);
+      scrim.addEventListener("click", function (e) { if (e.target === scrim) closeModal(); });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !scrim.hidden) closeModal();
+      });
+    }
+
+    var focusForm = document.getElementById("spFocusForm");
+    if (focusForm) focusForm.addEventListener("click", function () { jobType.focus(); });
+
+    render();
+  })();
+
+  {% if saved %}SP.toast("Entry saved.");{% endif %}
+  {% if deleted %}SP.toast("Entry deleted.");{% endif %}
+  {% if submitted_count %}SP.toast("Sent to {{ manager_name }} for approval.");{% endif %}
+</script>
+{% endblock %}

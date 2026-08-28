@@ -141,6 +141,59 @@
           {% endif %}
         </div>
 
+        {# --- What-if simulator --- #}
+        <div class="sp-card p-4 mt-3" id="spSim" data-sim="{{ sim_data }}">
+          <h2 class="mb-1">What if?</h2>
+          <p class="sp-muted sp-small mb-3">See what more work is worth before you do it.</p>
+
+          <label class="sp-label" for="spSimJob">Job type</label>
+          <select class="sp-control sp-control-sm mb-3" id="spSimJob"></select>
+
+          <label class="sp-label" for="spSimCount">
+            How many more this month? <span id="spSimCountOut">0</span>
+          </label>
+          <input class="sp-slider" type="range" id="spSimCount" min="0" max="40" step="1" value="0"
+                 aria-describedby="spSimResult">
+
+          <div id="spSimResult" aria-live="polite">
+            <p class="sp-sim-value mb-1"><span id="spSimPoints">0</span> <span class="sp-kpi-unit">pts</span></p>
+            <p class="mb-2">
+              <span class="sp-tier sp-tier-{{ agent_tier.slug }}" id="spSimTier">{{ agent_tier.name }}</span>
+              <span class="sp-muted sp-small ms-2">$<span id="spSimDollars">0</span></span>
+            </p>
+            <p class="sp-sim-crossover mb-1" id="spSimCross" hidden></p>
+            <p class="sp-sim-path mb-0" id="spSimPath"></p>
+          </div>
+        </div>
+
+        {# --- Dollar ledger --- #}
+        <div class="sp-card p-4 mt-3">
+          <p class="sp-kpi-label mb-1">Earned this period</p>
+          <p class="sp-ledger-value mb-3">$<span data-count="{{ ledger.approved_usd|floatformat:2 }}" data-count-decimals="2">0</span></p>
+
+          <div class="sp-ledger-row">
+            <span>{{ ledger.approved_points }} approved pts &times; ${{ point_value }}</span>
+            <span>${{ ledger.approved_usd|floatformat:2 }}</span>
+          </div>
+          <div class="sp-ledger-row sp-ledger-pending">
+            <span>{{ ledger.pending_points }} pts pending approval</span>
+            <span class="sp-ledger-amount">${{ ledger.pending_usd|floatformat:2 }}</span>
+          </div>
+
+          <p class="sp-muted sp-small mb-0 mt-3">Next payout {{ next_payout }}</p>
+          <a class="sp-link-through" href="{% url 'dashboard:faqs' %}">Payout FAQ &rarr;</a>
+
+          <button type="button" class="sp-disclose" id="spLedgerToggle"
+                  aria-expanded="false" aria-controls="spLedgerBody">How this is calculated</button>
+          <div class="sp-disclose-body" id="spLedgerBody">
+            <div class="sp-disclose-inner">
+              Every approved point is worth <strong>${{ point_value }}</strong> at the current demo rate.
+              Points sit as "pending" until your manager approves the log, so they are not banked yet.
+              Approved points are paid out on the first business day of the month.
+            </div>
+          </div>
+        </div>
+
         <div class="sp-card p-4 mt-3">
           <p class="sp-kpi-label mb-3">Points, last 8 weeks</p>
           <div class="position-relative" id="spSpark">
@@ -188,6 +241,91 @@
       } else {
         requestAnimationFrame(function () { fill.style.width = fill.dataset.fill + "%"; });
       }
+    }
+
+
+    /* --- Dollar ledger disclosure --- */
+    var ledgerToggle = document.getElementById("spLedgerToggle");
+    if (ledgerToggle) {
+      var ledgerBody = document.getElementById("spLedgerBody");
+      ledgerToggle.addEventListener("click", function () {
+        var open = ledgerToggle.getAttribute("aria-expanded") === "true";
+        ledgerToggle.setAttribute("aria-expanded", String(!open));
+        ledgerBody.style.height = open ? "0px" : ledgerBody.scrollHeight + "px";
+      });
+    }
+
+    /* --- What-if simulator: all math from the same numbers the server uses --- */
+    var simCard = document.getElementById("spSim");
+    if (simCard) {
+      var SIM = JSON.parse(simCard.dataset.sim);
+      var jobSelect = document.getElementById("spSimJob");
+      var slider = document.getElementById("spSimCount");
+      var countOut = document.getElementById("spSimCountOut");
+      var pointsOut = document.getElementById("spSimPoints");
+      var dollarsOut = document.getElementById("spSimDollars");
+      var tierOut = document.getElementById("spSimTier");
+      var crossOut = document.getElementById("spSimCross");
+      var pathOut = document.getElementById("spSimPath");
+
+      SIM.jobs.forEach(function (job) {
+        var option = document.createElement("option");
+        option.value = job.code;
+        option.textContent = job.label + " (" + job.points + " pts)";
+        jobSelect.appendChild(option);
+      });
+      jobSelect.value = "new_install_residential";
+
+      function tierFor(points) {
+        var found = SIM.tiers[0];
+        SIM.tiers.forEach(function (t) { if (points >= t.min) found = t; });
+        return found;
+      }
+      function jobFor(code) {
+        return SIM.jobs.filter(function (j) { return j.code === code; })[0];
+      }
+      function jobsNeeded(job) {
+        var next = SIM.tiers.filter(function (t) { return t.min > SIM.points; })[0];
+        return next ? { tier: next, count: Math.ceil((next.min - SIM.points) / job.points) } : null;
+      }
+
+      function renderSim() {
+        var job = jobFor(jobSelect.value);
+        var count = parseInt(slider.value, 10);
+        var projected = SIM.points + count * job.points;
+        var tier = tierFor(projected);
+        var current = tierFor(SIM.points);
+
+        countOut.textContent = count;
+        pointsOut.textContent = projected.toLocaleString();
+        dollarsOut.textContent = (projected * SIM.rate).toFixed(2);
+
+        tierOut.textContent = tier.name;
+        tierOut.className = "sp-tier sp-tier-" + tier.slug;
+
+        if (tier.slug !== current.slug) {
+          crossOut.textContent = "This would move you to " + tier.name + ".";
+          crossOut.hidden = false;
+        } else {
+          crossOut.hidden = true;
+        }
+
+        /* Shortest path, in this job type and the highest-value one. */
+        var need = jobsNeeded(job);
+        if (need) {
+          var best = SIM.jobs.slice().sort(function (a, b) { return b.points - a.points; })[0];
+          var bestCount = Math.ceil((need.tier.min - SIM.points) / best.points);
+          pathOut.textContent = need.count + " \u00d7 " + job.label.toLowerCase() +
+            ", or " + bestCount + " \u00d7 " + best.label.toLowerCase() +
+            ", gets you to " + need.tier.name + ".";
+        } else {
+          pathOut.textContent = "You are already at the top tier.";
+        }
+      }
+
+      slider.addEventListener("input", renderSim);
+      jobSelect.addEventListener("change", renderSim);
+      renderSim();
     }
 
     /* --- Leaderboard ------------------------------------------ */
