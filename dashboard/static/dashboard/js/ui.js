@@ -62,7 +62,12 @@
     document.querySelectorAll(".u-reveal").forEach(function (el) { observer.observe(el); });
   }
 
-  window.SP = { animateCount: animateCount, toast: toast, observe: observer.observe.bind(observer) };
+  window.SP = {
+    animateCount: animateCount,
+    toast: toast,
+    observe: observer.observe.bind(observer),
+    reducedMotion: reduced
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

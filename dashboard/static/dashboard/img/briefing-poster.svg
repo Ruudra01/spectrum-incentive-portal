@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360" role="img" aria-label="Incentive briefing poster">
+  <rect width="640" height="360" fill="#00194A"/>
+  <g transform="translate(320 158)" fill="none" stroke="#5A6472" stroke-width="2">
+    <circle r="62"/>
+    <circle r="26" cy="-16" stroke="#FFFFFF"/>
+    <path d="M-40 52a40 40 0 0 1 80 0" stroke="#FFFFFF"/>
+  </g>
+  <rect x="286" y="252" width="68" height="2" fill="#005EFF"/>
+</svg>

@@ -4,17 +4,29 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Spectrum Incentive Portal{% endblock %}</title>
+  <link rel="icon" href="{% static 'dashboard/img/favicon.ico' %}" sizes="any">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  {# Inter stands in for the proprietary Spectrum Sans; see --sp-font. #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="{% static 'dashboard/css/spectrum.css' %}" rel="stylesheet">
   {% block extra_css %}{% endblock %}
 </head>
 <body>
-  {% url 'dashboard:landing' as landing_url %}
+  <a class="sp-skip" href="#main">Skip to content</a>
+
   {% with active=request.resolver_match.url_name %}
   <header class="sp-header">
     <div class="container sp-header-inner">
-      <a class="sp-wordmark" href="{{ landing_url }}">Spectrum</a>
 
+      <a class="sp-lockup" href="{% url 'dashboard:landing' %}">
+        <img class="sp-logo" src="{% static 'dashboard/img/spectrum-logo.svg' %}" alt="Spectrum">
+        <span class="sp-lockup-divider" aria-hidden="true"></span>
+        <span class="sp-lockup-sub">Incentive Portal</span>
+      </a>
+
+      {% if not hide_nav %}
       <button type="button" class="sp-nav-toggle" id="spNavToggle"
               aria-controls="spNavPanel" aria-expanded="false" aria-label="Open navigation">
         <span class="sp-nav-toggle-bar"></span>
@@ -23,17 +35,54 @@
       </button>
 
       <nav class="sp-nav" id="spNavPanel" aria-label="Main">
-        <a class="sp-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
-        <a class="sp-nav-link" href="#">Leaderboard</a>
-        <a class="sp-nav-link" href="#">Support</a>
+        <a class="sp-nav-link{% if active == 'dashboard' %} is-active{% endif %}"
+           href="{% url 'dashboard:dashboard' %}">Dashboard</a>
+        <a class="sp-nav-link{% if active == 'faqs' %} is-active{% endif %}"
+           href="{% url 'dashboard:faqs' %}">FAQs</a>
       </nav>
+
+      <div class="sp-account">
+        {% if is_authenticated %}
+        <div class="sp-profile" id="spProfile">
+          <button type="button" class="sp-profile-trigger" id="spProfileTrigger"
+                  aria-expanded="false" aria-controls="spProfileMenu" aria-haspopup="true">
+            <span class="sp-avatar" aria-hidden="true">{{ current_agent.initials }}</span>
+            <span class="sp-profile-name">{{ current_agent.first_name }}</span>
+            <svg class="sp-profile-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </button>
+
+          <div class="sp-profile-menu" id="spProfileMenu" role="menu" hidden>
+            <div class="sp-profile-head">
+              <p class="sp-profile-fullname mb-0">{{ current_agent.name }}</p>
+              <p class="sp-profile-meta mb-0">{{ current_agent.employee_id }} &middot; {{ current_agent.region }}</p>
+            </div>
+            <hr class="sp-profile-divider">
+            <a class="sp-profile-item" role="menuitem" href="{% url 'dashboard:profile' %}">My Profile</a>
+            <a class="sp-profile-item" role="menuitem" href="{% url 'dashboard:notification_settings' %}">Notification Settings</a>
+            <hr class="sp-profile-divider">
+            {# Sign out changes state, so it is a POST with CSRF, not a link. #}
+            <form method="post" action="{% url 'dashboard:logout' %}">
+              {% csrf_token %}
+              <button type="submit" class="sp-profile-item sp-profile-signout" role="menuitem">Sign Out</button>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <a class="btn-sp-primary sp-signin" href="{% url 'dashboard:login' %}">Sign in</a>
+        {% endif %}
+      </div>
+      {% endif %}
+
     </div>
   </header>
   {% endwith %}
 
   <div class="sp-nav-scrim" id="spNavScrim" hidden></div>
 
-  <main>
+  <main id="main" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
 
@@ -47,11 +96,12 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{% static 'dashboard/js/ui.js' %}"></script>
   <script>
-    /* Hand-rolled mobile nav panel — Bootstrap's collapse is not used here. */
+    /* Hand-rolled mobile nav panel — Bootstrap's collapse is not used. */
     (function () {
       var toggle = document.getElementById("spNavToggle");
       var panel = document.getElementById("spNavPanel");
       var scrim = document.getElementById("spNavScrim");
+      if (!toggle) return;              /* login page renders no nav */
 
       function setOpen(open) {
         document.body.classList.toggle("sp-nav-open", open);
@@ -72,7 +122,70 @@
         }
       });
     })();
+
+    /* Hand-rolled profile dropdown — Bootstrap's dropdown JS is not used. */
+    (function () {
+      var root = document.getElementById("spProfile");
+      if (!root) return;                       /* signed out: nothing to wire */
+      var trigger = document.getElementById("spProfileTrigger");
+      var menu = document.getElementById("spProfileMenu");
+      var items = Array.prototype.slice.call(menu.querySelectorAll(".sp-profile-item"));
+
+      function isOpen() { return !menu.hidden; }
+
+      function setOpen(open, focusFirst) {
+        if (open) {
+          menu.hidden = false;
+          requestAnimationFrame(function () { menu.classList.add("is-open"); });
+          if (focusFirst) items[0].focus();
+        } else {
+          menu.classList.remove("is-open");
+          setTimeout(function () { menu.hidden = true; }, 160);
+        }
+        trigger.setAttribute("aria-expanded", String(open));
+      }
+
+      trigger.addEventListener("click", function (e) {
+        e.stopPropagation();
+        setOpen(!isOpen(), false);
+      });
+
+      trigger.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setOpen(true, true);
+        }
+      });
+
+      menu.addEventListener("keydown", function (e) {
+        var index = items.indexOf(document.activeElement);
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          items[(index + 1) % items.length].focus();
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          items[(index - 1 + items.length) % items.length].focus();
+        }
+      });
+
+      /* Outside click, Escape, and focus leaving the menu all close it. */
+      document.addEventListener("click", function (e) {
+        if (isOpen() && !root.contains(e.target)) setOpen(false, false);
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && isOpen()) {
+          setOpen(false, false);
+          trigger.focus();
+        }
+      });
+      root.addEventListener("focusout", function (e) {
+        if (isOpen() && !root.contains(e.relatedTarget)) setOpen(false, false);
+      });
+    })();
   </script>
+  {% if request.GET.signed_out %}
+  <script>SP.toast("You've been signed out.");</script>
+  {% endif %}
   {% block extra_js %}{% endblock %}
 </body>
 </html>

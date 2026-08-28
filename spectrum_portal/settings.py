@@ -62,12 +62,18 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "dashboard.context_processors.portal",
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = "spectrum_portal.wsgi.application"
+
+# Signed-cookie sessions keep the mock auth toggle working without a database
+# table, so the project stays migration-free. Values are signed, not encrypted
+# — only the demo auth flag is stored here.
+SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 
 
 # Database

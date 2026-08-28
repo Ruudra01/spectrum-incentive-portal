@@ -1,0 +1,134 @@
+{% extends "dashboard/account_base.html" %}
+
+{% block title %}My Profile — Spectrum Incentive Portal{% endblock %}
+
+{% block account_content %}
+<div class="row g-3">
+
+  {# Identity #}
+  <div class="col-lg-8">
+    <div class="sp-card p-4 sp-identity">
+      <span class="sp-avatar-lg" aria-hidden="true">{{ current_agent.initials }}</span>
+      <div class="sp-identity-text">
+        <h1 class="mb-1">{{ current_agent.name }}</h1>
+        <p class="sp-muted mb-2">{{ current_agent.job_title }}</p>
+        <span class="sp-tier sp-tier-{{ tier.slug }}">{{ tier.name }}</span>
+      </div>
+      <span class="sp-tooltip sp-identity-action" data-tip="Coming soon">
+        <a class="btn-sp-secondary" href="#" aria-describedby="spPhotoTip">Change photo</a>
+        <span class="sp-tooltip-bubble" id="spPhotoTip" role="tooltip">Coming soon</span>
+      </span>
+    </div>
+
+    {# Details #}
+    <div class="sp-card p-4 mt-3">
+      <div class="sp-details-head">
+        <h2 class="mb-0">Details</h2>
+        <button type="button" class="btn-sp-secondary sp-btn-sm" id="spEditBtn">Edit details</button>
+      </div>
+
+      <form method="post" action="{% url 'dashboard:profile' %}" id="spProfileForm">
+        {% csrf_token %}
+        <dl class="sp-details">
+          <div class="sp-detail"><dt>Employee ID</dt><dd>{{ current_agent.employee_id }}</dd></div>
+          <div class="sp-detail"><dt>Email</dt><dd>{{ current_agent.email }}</dd></div>
+
+          <div class="sp-detail">
+            <dt>Phone</dt>
+            <dd data-field="phone" data-original="{{ current_agent.phone }}">
+              <span class="sp-value">{{ current_agent.phone }}</span>
+            </dd>
+          </div>
+
+          <div class="sp-detail"><dt>Region</dt><dd>{{ current_agent.region }}</dd></div>
+          <div class="sp-detail"><dt>Team</dt><dd>{{ current_agent.team }}</dd></div>
+          <div class="sp-detail"><dt>Reports to</dt><dd>{{ current_agent.manager_name }}</dd></div>
+
+          <div class="sp-detail">
+            <dt>Location</dt>
+            <dd data-field="location" data-original="{{ current_agent.location }}">
+              <span class="sp-value">{{ current_agent.location }}</span>
+            </dd>
+          </div>
+
+          <div class="sp-detail"><dt>Start date</dt><dd>{{ current_agent.hire_date }}</dd></div>
+        </dl>
+
+        <p class="sp-muted sp-small sp-managed">Everything except phone and location is managed by HR.</p>
+
+        <div class="sp-edit-actions" id="spEditActions" hidden>
+          <button type="submit" class="btn-sp-primary sp-btn-sm">Save</button>
+          <button type="button" class="btn-sp-secondary sp-btn-sm" id="spCancelBtn">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# Performance summary #}
+  <div class="col-lg-4">
+    <div class="sp-card p-4">
+      <h2 class="mb-3">Performance</h2>
+      <dl class="sp-summary">
+        <div><dt>Points</dt><dd>{{ current_agent.points }}</dd></div>
+        <div><dt>Rank</dt><dd>#{{ current_agent.rank }}</dd></div>
+        <div><dt>Tier</dt><dd><span class="sp-tier sp-tier-{{ tier.slug }}">{{ tier.name }}</span></dd></div>
+        <div><dt>To next tier</dt>
+          <dd>{% if next_tier %}{{ next_tier.needed }} pts to {{ next_tier.name }}{% else %}Top tier reached{% endif %}</dd>
+        </div>
+      </dl>
+      <a class="sp-link-through" href="{% url 'dashboard:dashboard' %}">View full dashboard &rarr;</a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Profile: swap two values for inputs in place. Cancel restores from the
+     data-original attribute, so it never needs a round trip. */
+  (function () {
+    var editBtn = document.getElementById("spEditBtn");
+    var cancelBtn = document.getElementById("spCancelBtn");
+    var actions = document.getElementById("spEditActions");
+    var cells = Array.prototype.slice.call(document.querySelectorAll("dd[data-field]"));
+
+    function toInput(cell) {
+      var field = cell.dataset.field;
+      var value = cell.querySelector(".sp-value").textContent.trim();
+      cell.innerHTML = "";
+      var input = document.createElement("input");
+      input.className = "sp-control sp-control-sm";
+      input.type = field === "phone" ? "tel" : "text";
+      input.name = field;
+      input.value = value;
+      input.setAttribute("aria-label", field === "phone" ? "Phone" : "Location");
+      cell.appendChild(input);
+    }
+
+    function toText(cell, value) {
+      cell.innerHTML = "";
+      var span = document.createElement("span");
+      span.className = "sp-value";
+      span.textContent = value;
+      cell.appendChild(span);
+    }
+
+    editBtn.addEventListener("click", function () {
+      cells.forEach(toInput);
+      actions.hidden = false;
+      editBtn.hidden = true;
+      cells[0].querySelector("input").focus();
+    });
+
+    cancelBtn.addEventListener("click", function () {
+      cells.forEach(function (cell) { toText(cell, cell.dataset.original); });
+      actions.hidden = true;
+      editBtn.hidden = false;
+      editBtn.focus();
+    });
+  })();
+
+  {% if saved %}SP.toast("Profile updated.");{% endif %}
+</script>
+{% endblock %}

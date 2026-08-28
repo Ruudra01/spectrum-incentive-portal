@@ -1,0 +1,156 @@
+{% extends "dashboard/account_base.html" %}
+
+{% block title %}Notifications — Spectrum Incentive Portal{% endblock %}
+
+{% block account_content %}
+{% csrf_token %}
+
+{# Master mute sits in its own card; it disables without destroying state. #}
+<div class="sp-card p-4 sp-mute-card {% if mute_all %}is-muted{% endif %}" id="spMuteCard">
+  <div class="sp-pref-row">
+    <div>
+      <p class="sp-pref-label mb-1">Mute all notifications</p>
+      <p class="sp-pref-desc mb-0">Pauses every alert below. Your individual settings are kept.</p>
+    </div>
+    <label class="sp-switch">
+      <input type="checkbox" id="spMuteAll" {% if mute_all %}checked{% endif %}
+             aria-label="Mute all notifications">
+      <span class="sp-switch-track" aria-hidden="true"><span class="sp-switch-thumb"></span></span>
+    </label>
+  </div>
+</div>
+
+<div id="spPrefs" class="sp-prefs {% if mute_all %}is-disabled{% endif %}">
+  {% for group in groups %}
+  <div class="sp-card p-4 mt-3">
+    <h2 class="mb-1">{{ group.title }}</h2>
+    <div class="sp-pref-head" aria-hidden="true">
+      <span>Email</span><span>Push</span>
+    </div>
+
+    {% for item in group.items %}
+    <div class="sp-pref-row sp-pref-item">
+      <div class="sp-pref-text">
+        <p class="sp-pref-label mb-1">{{ item.label }}</p>
+        <p class="sp-pref-desc mb-0">{{ item.description }}</p>
+      </div>
+      <div class="sp-pref-controls">
+        <label class="sp-switch">
+          <input type="checkbox" data-key="{{ item.key }}" data-channel="email"
+                 {% if item.email %}checked{% endif %}
+                 aria-label="{{ item.label }} — email">
+          <span class="sp-switch-track" aria-hidden="true"><span class="sp-switch-thumb"></span></span>
+        </label>
+        <label class="sp-switch">
+          <input type="checkbox" data-key="{{ item.key }}" data-channel="push"
+                 {% if item.push %}checked{% endif %}
+                 aria-label="{{ item.label }} — push">
+          <span class="sp-switch-track" aria-hidden="true"><span class="sp-switch-thumb"></span></span>
+        </label>
+        <span class="sp-saved" aria-live="polite"></span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+
+  <div class="sp-card p-4 mt-3">
+    <h2 class="mb-1">Digest frequency</h2>
+    <p class="sp-pref-desc mb-3">How often we bundle the quieter updates.</p>
+    <div class="sp-segmented" role="radiogroup" aria-label="Digest frequency" id="spDigest">
+      {% for choice in digest_choices %}
+      <label class="sp-segment">
+        <input type="radio" name="digest" value="{{ choice }}"
+               {% if choice == digest_current %}checked{% endif %}>
+        <span>{{ choice }}</span>
+      </label>
+      {% endfor %}
+      <span class="sp-saved" aria-live="polite" id="spDigestSaved"></span>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Notifications: every control autosaves to the session and reports inline. */
+  (function () {
+    var url = "{% url 'dashboard:notification_settings' %}";
+    var csrf = document.querySelector("[name=csrfmiddlewaretoken]").value;
+    var prefs = document.getElementById("spPrefs");
+    var muteAll = document.getElementById("spMuteAll");
+    var muteCard = document.getElementById("spMuteCard");
+    var timers = {};
+
+    function flash(node) {
+      if (!node) return;
+      node.textContent = "Saved";
+      node.classList.add("is-visible");
+      setTimeout(function () { node.classList.remove("is-visible"); }, 1500);
+    }
+
+    function save(payload, onError, savedNode) {
+      return fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.json();
+        })
+        .then(function () { flash(savedNode); })
+        .catch(function () {
+          onError();
+          SP.toast("Could not save that change. Please try again.");
+        });
+    }
+
+    /* Individual channel toggles, debounced per key+channel. */
+    prefs.addEventListener("change", function (e) {
+      var input = e.target;
+      if (!input.dataset.key) return;
+      var id = input.dataset.key + ":" + input.dataset.channel;
+      var savedNode = input.closest(".sp-pref-controls").querySelector(".sp-saved");
+
+      clearTimeout(timers[id]);
+      timers[id] = setTimeout(function () {
+        save(
+          { key: input.dataset.key, channel: input.dataset.channel, value: input.checked },
+          function () { input.checked = !input.checked; },
+          savedNode
+        );
+      }, 300);
+    });
+
+    /* Digest frequency — remember the last good choice so a failed save reverts. */
+    var digestBox = document.getElementById("spDigest");
+    var lastDigest = digestBox.querySelector('input[name="digest"]:checked');
+    digestBox.addEventListener("change", function (e) {
+      if (e.target.name !== "digest") return;
+      var previous = lastDigest;
+      lastDigest = e.target;
+      save({ digest: e.target.value }, function () {
+        if (previous) previous.checked = true;
+        lastDigest = previous;
+      }, document.getElementById("spDigestSaved"));
+    });
+
+    /* Master mute dims and disables without clearing what is stored. */
+    function applyMute(on) {
+      prefs.classList.toggle("is-disabled", on);
+      muteCard.classList.toggle("is-muted", on);
+      prefs.querySelectorAll("input").forEach(function (input) { input.disabled = on; });
+    }
+    applyMute(muteAll.checked);
+
+    muteAll.addEventListener("change", function () {
+      applyMute(muteAll.checked);
+      save({ mute_all: muteAll.checked }, function () {
+        muteAll.checked = !muteAll.checked;
+        applyMute(muteAll.checked);
+      }, null);
+    });
+  })();
+</script>
+{% endblock %}

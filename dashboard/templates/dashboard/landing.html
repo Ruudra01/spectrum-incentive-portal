@@ -1,7 +1,7 @@
 {% extends "dashboard/base.html" %}
 {% load static %}
 
-{% block title %}Spectrum Incentive Portal — Earn, climb, compete{% endblock %}
+{% block title %}Home — Spectrum Incentive Portal{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -37,15 +37,16 @@
     transition: color var(--sp-ease);
   }
   .sp-tab:hover { color: var(--sp-text); }
-  .sp-tab[aria-selected="true"] { color: var(--sp-text); font-weight: 600; }
+  .sp-tab[aria-selected="true"] { color: var(--tier-color); font-weight: 600; }
   .sp-tab-indicator {
     position: absolute;
     bottom: -1px;
     left: 0;
     height: 2px;
     width: 0;
-    background-color: var(--sp-blue);
-    transition: transform 220ms cubic-bezier(.4, 0, .2, 1), width 220ms cubic-bezier(.4, 0, .2, 1);
+    background-color: var(--tier-color, var(--sp-blue));
+    transition: transform 220ms cubic-bezier(.4, 0, .2, 1), width 220ms cubic-bezier(.4, 0, .2, 1),
+      background-color 220ms ease;
   }
   .sp-tabpanel { padding: 2rem 0 0; transition: opacity 200ms ease; }
   .sp-tabpanel.is-swapping { opacity: 0; }
@@ -54,6 +55,10 @@
   .sp-perks li:last-child { border-bottom: 0; }
 
   .sp-stat-value { font-size: 4rem; font-weight: 600; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sp-hero-word, .sp-hero-tail { opacity: 1; transform: none; }
+  }
 
   @media (max-width: 575.98px) {
     .sp-section { padding: 3rem 0; }
@@ -68,8 +73,8 @@
 {# 1. Hero #}
 <section class="sp-section sp-hero" id="spHero">
   <div class="container">
-    <div class="row">
-      <div class="col-lg-8">
+    <div class="row align-items-center g-4">
+      <div class="col-lg-6">
         <p class="sp-eyebrow sp-hero-word" style="transition-delay: 0ms">Field Incentive Program</p>
         <h1 class="mt-2">
           <span class="sp-hero-word" style="transition-delay: 80ms">Every</span>
@@ -84,10 +89,19 @@
             updated every time a job closes.
           </p>
           <p class="mt-4 mb-0 d-flex flex-wrap gap-2">
-            <a class="sp-btn" href="/dashboard/">Open my dashboard</a>
-            <a class="sp-btn sp-btn-ghost" href="#tier-explorer">Explore the tiers</a>
+            {% if is_authenticated %}
+            <a class="btn-sp-primary" href="{% url 'dashboard:dashboard' %}">Go to my dashboard</a>
+            {% else %}
+            <a class="btn-sp-primary" href="{% url 'dashboard:login' %}">Sign in to your dashboard</a>
+            {% endif %}
+            <a class="btn-sp-secondary" href="#tier-explorer">Explore the tiers</a>
           </p>
         </div>
+      </div>
+
+      {# Avatar player sits beside the hero copy; stacks below it under 992px. #}
+      <div class="col-lg-6 u-reveal">
+        {% include "dashboard/partials/_avatar_explainer.html" %}
       </div>
     </div>
   </div>
@@ -150,6 +164,7 @@
                   role="tab"
                   id="sp-tab-{{ tier.slug }}"
                   data-slug="{{ tier.slug }}"
+                  style="--tier-color: var(--tier-{{ tier.slug }});"
                   aria-controls="spTierPanel"
                   aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
                   tabindex="{% if forloop.first %}0{% else %}-1{% endif %}">{{ tier.name }}</button>
@@ -195,7 +210,11 @@
       <p class="sp-lede mx-auto mb-4">
         Sign in to see this week's total, your tier progress and where you sit on the board.
       </p>
-      <a class="sp-btn" href="/dashboard/">Open my dashboard</a>
+      {% if is_authenticated %}
+      <a class="btn-sp-primary" href="{% url 'dashboard:dashboard' %}">Go to my dashboard</a>
+      {% else %}
+      <a class="btn-sp-primary" href="{% url 'dashboard:login' %}">Sign in to your dashboard</a>
+      {% endif %}
     </div>
   </div>
 </section>
@@ -228,13 +247,14 @@
       }).join("");
       panel.innerHTML =
         '<p class="sp-eyebrow mb-2">' + range(tier) + "</p>" +
-        "<h2>" + tier.name + "</h2>" +
+        '<h2><span class="sp-tier sp-tier-' + tier.slug + '">' + tier.name + "</span></h2>" +
         '<ul class="sp-perks mt-3">' + perks + "</ul>";
     }
 
     function moveIndicator(tab) {
       indicator.style.width = tab.offsetWidth + "px";
       indicator.style.transform = "translateX(" + tab.offsetLeft + "px)";
+      indicator.style.backgroundColor = getComputedStyle(tab).getPropertyValue("--tier-color");
     }
 
     function select(index, focus) {

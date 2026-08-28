@@ -1,4 +1,5 @@
 {% extends "dashboard/base.html" %}
+{% load static %}
 
 {% block title %}Dashboard — Spectrum Incentive Portal{% endblock %}
 
@@ -37,7 +38,12 @@
       <div class="col-lg-8">
         <section class="sp-card" id="spBoard" aria-labelledby="spBoardTitle">
           <div class="sp-toolbar">
-            <h2 id="spBoardTitle" class="me-auto mb-0">Leaderboard</h2>
+            <h2 id="spBoardTitle" class="mb-0">Leaderboard</h2>
+            <div class="sp-legend ms-auto" aria-label="Tier colour key">
+              <span class="sp-legend-item"><span class="sp-swatch sp-swatch-bronze"></span>Bronze</span>
+              <span class="sp-legend-item"><span class="sp-swatch sp-swatch-silver"></span>Silver</span>
+              <span class="sp-legend-item"><span class="sp-swatch sp-swatch-gold"></span>Gold</span>
+            </div>
             <label class="visually-hidden" for="spFilter">Filter agents by name or region</label>
             <input type="search" id="spFilter" class="sp-input" placeholder="Filter by name or region" autocomplete="off">
           </div>
@@ -100,6 +106,10 @@
                     </div>
                   </td>
                 </tr>
+                {% empty %}
+                <tr class="sp-empty-row">
+                  <td colspan="5">No agents on the board yet</td>
+                </tr>
                 {% endfor %}
                 <tr class="sp-empty-row" id="spEmpty" hidden>
                   <td colspan="5">No agents match</td>
@@ -119,7 +129,8 @@
           <p class="mb-3"><span class="sp-tier sp-tier-{{ agent_tier.slug }}">{{ agent_tier.name }}</span></p>
 
           {% if next_tier %}
-            <div class="sp-progress" role="progressbar" aria-valuenow="{{ next_tier.percent }}"
+            <div class="sp-progress" style="--tier-color: var(--tier-{{ agent_tier.slug }});"
+                 role="progressbar" aria-valuenow="{{ next_tier.percent }}"
                  aria-valuemin="0" aria-valuemax="100"
                  aria-label="Progress toward {{ next_tier.name }}">
               <div class="sp-progress-fill" data-fill="{{ next_tier.percent }}"></div>
@@ -149,7 +160,6 @@
           <p class="sp-muted sp-small mb-0 mt-2">{{ agent.points_this_week }} points this week</p>
         </div>
 
-        <!-- AI Avatar Explainer — Day 5 -->
 
       </div>
     </div>
@@ -172,7 +182,12 @@
     /* --- Tier progress bar: 0 to its width on load ------------- */
     var fill = document.querySelector(".sp-progress-fill");
     if (fill) {
-      requestAnimationFrame(function () { fill.style.width = fill.dataset.fill + "%"; });
+      if (SP.reducedMotion) {
+        fill.style.transition = "none";
+        fill.style.width = fill.dataset.fill + "%";
+      } else {
+        requestAnimationFrame(function () { fill.style.width = fill.dataset.fill + "%"; });
+      }
     }
 
     /* --- Leaderboard ------------------------------------------ */
@@ -229,7 +244,9 @@
         if (visible) shown++;
       });
 
-      empty.hidden = shown > 0;
+      /* An empty board already renders its own state, so do not stack a
+         second "no match" row on top of it. */
+      empty.hidden = shown > 0 || total === 0;
       count.textContent = "Showing " + shown + " of " + total + " agents";
     }
 
@@ -319,145 +336,6 @@
       point.addEventListener("focus", show);
       point.addEventListener("blur", hide);
       point.setAttribute("tabindex", "0");
-    });
-  })();
-</script>
-<script>
-  /* Policy Assistant. Every send — pill or typed — goes through sendMessage. */
-  (function () {
-    var root = document.getElementById("spChat");
-    var launcher = document.getElementById("spChatLauncher");
-    var panel = document.getElementById("spChatPanel");
-    var closeBtn = document.getElementById("spChatClose");
-    var log = document.getElementById("spChatLog");
-    var typing = document.getElementById("spTyping");
-    var pills = document.getElementById("spChatPills");
-    var form = document.getElementById("spChatForm");
-    var input = document.getElementById("spChatInput");
-    var send = document.getElementById("spChatSend");
-    var csrf = form.querySelector("[name=csrfmiddlewaretoken]").value;
-    var inFlight = false;
-
-    /* --- Open / close ----------------------------------------- */
-    function open() {
-      panel.hidden = false;
-      root.classList.add("sp-chat-open");
-      launcher.setAttribute("aria-expanded", "true");
-      requestAnimationFrame(function () { panel.classList.add("is-open"); });
-      input.focus();
-    }
-
-    function close() {
-      panel.classList.remove("is-open");
-      root.classList.remove("sp-chat-open");
-      launcher.setAttribute("aria-expanded", "false");
-      setTimeout(function () { panel.hidden = true; }, 220);
-      launcher.focus();
-    }
-
-    launcher.addEventListener("click", open);
-    closeBtn.addEventListener("click", close);
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !panel.hidden) close();
-    });
-
-    /* --- Rendering -------------------------------------------- */
-    function addBubble(role, text) {
-      var wrap = document.createElement("div");
-      wrap.className = "sp-msg sp-msg-" + role;
-      var bubble = document.createElement("div");
-      bubble.className = "sp-bubble";
-      bubble.textContent = text;          /* never innerHTML */
-      wrap.appendChild(bubble);
-      log.appendChild(wrap);
-      requestAnimationFrame(function () { wrap.classList.add("is-visible"); });
-      scrollToLatest();
-      return wrap;
-    }
-
-    function scrollToLatest() {
-      log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
-    }
-
-    function setTyping(on) {
-      typing.hidden = !on;
-      if (on) scrollToLatest();
-    }
-
-    function setSendState() {
-      send.disabled = inFlight || !input.value.trim();
-    }
-
-    /* --- The single send path --------------------------------- */
-    function sendMessage(text) {
-      text = (text || "").trim();
-      if (!text || inFlight) return;
-
-      inFlight = true;
-      setSendState();
-      addBubble("user", text);
-      setTyping(true);
-
-      var started = Date.now();
-
-      /* Hold the indicator 700-1200ms so the reply does not land instantly. */
-      function settle(callback) {
-        var wait = Math.max(0, 700 + Math.random() * 500 - (Date.now() - started));
-        setTimeout(function () {
-          setTyping(false);
-          callback();
-          inFlight = false;
-          setSendState();
-        }, wait);
-      }
-
-      fetch("{% url 'dashboard:chat_api' %}", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
-        body: JSON.stringify({ message: text })
-      })
-        .then(function (response) {
-          if (!response.ok) throw new Error("HTTP " + response.status);
-          return response.json();
-        })
-        .then(function (data) {
-          settle(function () { addBubble("bot", data.reply); });
-        })
-        .catch(function () {
-          settle(function () {
-            addBubble("bot", "I could not reach the policy service just then. Please try again in a moment.");
-          });
-        });
-    }
-
-    /* --- Inputs into that one path ---------------------------- */
-    pills.addEventListener("click", function (e) {
-      var pill = e.target.closest(".sp-pill");
-      if (!pill || inFlight) return;
-      pill.classList.add("is-used");     /* pills stay clickable, just dimmed */
-      sendMessage(pill.textContent);
-    });
-
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var text = input.value;
-      input.value = "";
-      input.style.height = "auto";
-      setSendState();
-      sendMessage(text);
-    });
-
-    input.addEventListener("input", function () {
-      setSendState();
-      input.style.height = "auto";
-      input.style.height = input.scrollHeight + "px";
-    });
-
-    input.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        form.requestSubmit();
-      }
     });
   })();
 </script>

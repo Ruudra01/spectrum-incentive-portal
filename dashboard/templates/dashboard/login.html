@@ -1,0 +1,149 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+
+{% block title %}Sign in — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-login">
+  <div class="sp-login-inner">
+
+    <img class="sp-login-logo" src="{% static 'dashboard/img/spectrum-logo.svg' %}" alt="Spectrum">
+
+    <div class="sp-card sp-login-card">
+      <h1 class="sp-login-title">Sign in to your account</h1>
+      <p class="sp-muted sp-small sp-login-sub">Use your Spectrum field credentials to continue.</p>
+
+      {% if error %}
+      <div class="sp-alert" role="alert" tabindex="-1" id="spLoginAlert">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="{% url 'dashboard:login' %}" novalidate id="spLoginForm">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="sp-field">
+          <label class="sp-label" for="spEmail">Email</label>
+          <input class="sp-control" type="email" id="spEmail" name="email"
+                 value="{{ email }}" autocomplete="email" required
+                 aria-describedby="spEmailError">
+          <p class="sp-field-error" id="spEmailError" hidden></p>
+        </div>
+
+        <div class="sp-field">
+          <label class="sp-label" for="spPassword">Password</label>
+          <div class="sp-control-wrap">
+            <input class="sp-control" type="password" id="spPassword" name="password"
+                   autocomplete="current-password" required aria-describedby="spPasswordError">
+            <button type="button" class="sp-reveal" id="spReveal"
+                    aria-pressed="false" aria-label="Show password" aria-controls="spPassword">
+              <svg class="sp-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg class="sp-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+                <path d="M2 12s3.6-7 10-7c2 0 3.7.7 5.1 1.6M22 12s-3.6 7-10 7c-2 0-3.7-.7-5.1-1.6"/>
+                <path d="M3 3l18 18"/>
+              </svg>
+            </button>
+          </div>
+          <p class="sp-field-error" id="spPasswordError" hidden></p>
+        </div>
+
+        <button type="submit" class="btn-sp-primary sp-login-submit" id="spLoginSubmit">
+          <span class="sp-spinner" aria-hidden="true" hidden></span>
+          <span id="spLoginSubmitLabel">Sign in</span>
+        </button>
+      </form>
+
+      <p class="sp-login-forgot"><a href="#">Forgot password?</a></p>
+    </div>
+
+    <div class="sp-demo-box">
+      <p class="sp-demo-label">Demo access</p>
+      <p class="sp-demo-line mb-0">{{ demo_email }}</p>
+      <p class="sp-demo-line mb-0">{{ demo_password }}</p>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Login: reveal toggle, on-blur validation, submitting state. */
+  (function () {
+    var form = document.getElementById("spLoginForm");
+    var email = document.getElementById("spEmail");
+    var password = document.getElementById("spPassword");
+    var emailError = document.getElementById("spEmailError");
+    var passwordError = document.getElementById("spPasswordError");
+    var reveal = document.getElementById("spReveal");
+    var eye = reveal.querySelector(".sp-eye");
+    var eyeOff = reveal.querySelector(".sp-eye-off");
+    var submit = document.getElementById("spLoginSubmit");
+    var submitLabel = document.getElementById("spLoginSubmitLabel");
+    var spinner = submit.querySelector(".sp-spinner");
+    var alertBox = document.getElementById("spLoginAlert");
+
+    if (alertBox) alertBox.focus();
+
+    /* Show / hide password */
+    reveal.addEventListener("click", function () {
+      var shown = password.type === "text";
+      password.type = shown ? "password" : "text";
+      reveal.setAttribute("aria-pressed", String(!shown));
+      reveal.setAttribute("aria-label", shown ? "Show password" : "Hide password");
+      eye.hidden = !shown;
+      eyeOff.hidden = shown;
+    });
+
+    function setError(input, node, message) {
+      if (message) {
+        node.textContent = message;
+        node.hidden = false;
+        input.classList.add("is-invalid");
+        input.setAttribute("aria-invalid", "true");
+      } else {
+        node.hidden = true;
+        input.classList.remove("is-invalid");
+        input.removeAttribute("aria-invalid");
+      }
+      return !message;
+    }
+
+    function validateEmail() {
+      var value = email.value.trim();
+      if (!value) return setError(email, emailError, "Enter your email address.");
+      /* Deliberately loose — the server is the real check. */
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        return setError(email, emailError, "Enter a valid email address.");
+      }
+      return setError(email, emailError, null);
+    }
+
+    function validatePassword() {
+      if (!password.value) return setError(password, passwordError, "Enter your password.");
+      return setError(password, passwordError, null);
+    }
+
+    email.addEventListener("blur", validateEmail);
+    password.addEventListener("blur", validatePassword);
+    email.addEventListener("input", function () { if (emailError.hidden === false) validateEmail(); });
+    password.addEventListener("input", function () { if (passwordError.hidden === false) validatePassword(); });
+
+    form.addEventListener("submit", function (e) {
+      var ok = validateEmail() & validatePassword();
+      if (!ok) {
+        e.preventDefault();
+        (email.classList.contains("is-invalid") ? email : password).focus();
+        return;
+      }
+      submit.disabled = true;
+      spinner.hidden = false;
+      submitLabel.textContent = "Signing in…";
+    });
+  })();
+</script>
+{% endblock %}

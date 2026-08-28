@@ -74,6 +74,77 @@ KPI_STATS = [
 
 WEEKLY_POINTS = [180, 205, 160, 240, 275, 210, 255, 240]
 
+# ---------------------------------------------------------------------------
+# DEMO CREDENTIALS — frontend prototype only.
+# These are hardcoded on purpose so a reviewer can sign in without a database.
+# Replace with a real auth backend (hashed passwords, a user store, rate
+# limiting) before any non-demo use. Do not deploy this as-is.
+# ---------------------------------------------------------------------------
+DEMO_EMAIL = "agent@spectrum.com"
+DEMO_PASSWORD = "spectrum2026"
+
+# Profile page fields, layered on top of CURRENT_AGENT so identity stays in
+# one place. phone and location are the only editable values.
+PROFILE_DATA = dict(
+    CURRENT_AGENT,
+    email=DEMO_EMAIL,
+    phone="(614) 555-0142",
+    job_title="Field Installation Technician",
+    manager_name="Lorraine Deckard",
+    hire_date="March 4, 2023",
+    location="Columbus, OH",
+)
+
+# Notification preferences. Each item's default channels seed a fresh session.
+NOTIFICATION_PREFS = [
+    {
+        "title": "Performance",
+        "items": [
+            {"key": "points_awarded", "label": "Points awarded",
+             "description": "Every time a job clears review and posts to your balance.",
+             "email": True, "push": True},
+            {"key": "tier_promotion", "label": "Tier promotion",
+             "description": "When you cross into a new tier.",
+             "email": True, "push": True},
+            {"key": "weekly_summary", "label": "Weekly summary",
+             "description": "Your points and rank for the week, sent Monday morning.",
+             "email": True, "push": False},
+        ],
+    },
+    {
+        "title": "Leaderboard",
+        "items": [
+            {"key": "rank_change", "label": "Rank change",
+             "description": "When your position on the board moves.",
+             "email": False, "push": True},
+            {"key": "passed_by_agent", "label": "Someone passes you",
+             "description": "When another agent overtakes your rank.",
+             "email": False, "push": True},
+            {"key": "monthly_reset", "label": "Monthly reset",
+             "description": "When the board rolls over to a new month.",
+             "email": True, "push": False},
+        ],
+    },
+    {
+        "title": "Program",
+        "items": [
+            {"key": "new_incentive", "label": "New incentive launched",
+             "description": "Limited-time bonuses and seasonal multipliers.",
+             "email": True, "push": True},
+            {"key": "payout_processed", "label": "Payout processed",
+             "description": "When a monthly payout leaves the queue.",
+             "email": True, "push": False},
+            {"key": "policy_updates", "label": "Policy updates",
+             "description": "Changes to how points, tiers or payouts work.",
+             "email": True, "push": False},
+        ],
+    },
+]
+
+DIGEST_CHOICES = ["Daily", "Weekly", "Off"]
+DIGEST_DEFAULT = "Weekly"
+MUTE_ALL_DEFAULT = False
+
 HEADLINE_STAT = {
     "label": "Points awarded to field agents this quarter",
     "value": sum(agent["points"] for agent in LEADERBOARD),
@@ -117,4 +188,9 @@ if __name__ == "__main__":
     assert [t["rank"] for t in LEADERBOARD] == list(range(1, 11))
     assert next(a for a in LEADERBOARD if a["id"] == CURRENT_AGENT["id"])["rank"] == 4
     assert {get_tier(a["points"])["slug"] for a in LEADERBOARD} == {"bronze", "silver", "gold"}
+    assert PROFILE_DATA["employee_id"] == CURRENT_AGENT["employee_id"]
+    assert PROFILE_DATA["email"] == DEMO_EMAIL
+    keys = [i["key"] for g in NOTIFICATION_PREFS for i in g["items"]]
+    assert len(keys) == len(set(keys)) == 9, keys
+    assert DIGEST_DEFAULT in DIGEST_CHOICES
     print("mock_data OK")

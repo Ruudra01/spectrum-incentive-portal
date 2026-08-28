@@ -1,0 +1,39 @@
+{% load static %}
+{# AI Avatar Explainer — video source is a placeholder until a real render exists #}
+<div class="sp-card p-4">
+  <h2 class="sp-briefing-title">Meet your incentive guide</h2>
+
+  <div class="sp-video" id="spVideoWrap">
+    {% comment %}
+      REAL AVATAR VIDEO GOES HERE.
+      Drop the rendered file in as a <source>, or swap this <video> for the
+      provider's <iframe> embed.
+
+        <source src="{% static 'dashboard/video/briefing-aug-2026.mp4' %}" type="video/mp4">
+    {% endcomment %}
+    <video id="spVideo" class="sp-video-el" preload="none" controls
+           poster="{% static 'dashboard/img/briefing-poster.svg' %}"
+           aria-label="Incentive briefing video"></video>
+
+    <button type="button" class="sp-video-play" id="spVideoPlay" aria-label="Play briefing">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  /* Play overlay wiring. */
+  (function () {
+    var video = document.getElementById("spVideo");
+    var play = document.getElementById("spVideoPlay");
+    if (!video) return;
+
+    play.addEventListener("click", function () {
+      var started = video.play();
+      if (started && started.catch) started.catch(function () { /* no source yet */ });
+    });
+    video.addEventListener("play", function () { play.hidden = true; });
+    video.addEventListener("pause", function () { play.hidden = false; });
+    video.addEventListener("ended", function () { play.hidden = false; });
+  })();
+</script>

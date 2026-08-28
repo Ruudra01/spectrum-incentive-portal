@@ -1,0 +1,27 @@
+{% extends "dashboard/base.html" %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    <header class="sp-page-header sp-account-header">
+      <h1>Account</h1>
+    </header>
+
+    {# Real routes, not JS tabs, so each survives a refresh and deep-links. #}
+    <nav class="sp-account-tabs" aria-label="Account sections">
+      {% with active=request.resolver_match.url_name %}
+      <a class="sp-account-tab{% if active == 'profile' %} is-active{% endif %}"
+         href="{% url 'dashboard:profile' %}"
+         {% if active == 'profile' %}aria-current="page"{% endif %}>My Profile</a>
+      <a class="sp-account-tab{% if active == 'notification_settings' %} is-active{% endif %}"
+         href="{% url 'dashboard:notification_settings' %}"
+         {% if active == 'notification_settings' %}aria-current="page"{% endif %}>Notifications</a>
+      {% endwith %}
+    </nav>
+
+    {% block account_content %}{% endblock %}
+
+  </div>
+</div>
+{% endblock %}

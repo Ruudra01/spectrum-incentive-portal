@@ -1,0 +1,110 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}FAQs — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    <header class="sp-page-header">
+      <div>
+        <h1>Frequently asked questions</h1>
+        <p class="sp-muted sp-small mb-0 mt-1">
+          The same answers the Policy Assistant gives — one source of truth.
+        </p>
+      </div>
+    </header>
+
+    <div class="row mt-4">
+      <div class="col-lg-8">
+        <label class="visually-hidden" for="spFaqSearch">Search questions</label>
+        <input type="search" id="spFaqSearch" class="sp-input sp-faq-search"
+               placeholder="Search questions and answers" autocomplete="off">
+
+        <ul class="sp-faq-list" id="spFaqList">
+          {% for item in faq %}
+          <li class="sp-faq-item" data-search="{{ item.question|lower }} {{ item.answer|lower }}">
+            <h2 class="sp-faq-heading">
+              <button type="button" class="sp-faq-q" aria-expanded="false" aria-controls="sp-faq-a-{{ forloop.counter }}">
+                <span>{{ item.question }}</span>
+                <svg class="sp-faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </button>
+            </h2>
+            <div class="sp-faq-a" id="sp-faq-a-{{ forloop.counter }}">
+              <div class="sp-faq-a-body">
+                <p class="mb-2">{{ item.answer }}</p>
+                <button type="button" class="sp-faq-ask" data-question="{{ item.question }}">
+                  Ask the assistant
+                </button>
+              </div>
+            </div>
+          </li>
+          {% empty %}
+          <li class="sp-faq-empty">No questions published yet</li>
+          {% endfor %}
+        </ul>
+
+        <p class="sp-faq-none sp-muted" id="spFaqNone" hidden>No matching questions</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% include "dashboard/partials/_chat_widget.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* FAQ search + accordion. Hand-rolled; no Bootstrap collapse. */
+  (function () {
+    var search = document.getElementById("spFaqSearch");
+    var list = document.getElementById("spFaqList");
+    var none = document.getElementById("spFaqNone");
+    var items = Array.prototype.slice.call(list.querySelectorAll(".sp-faq-item"));
+
+    /* Accordion — several may be open at once. */
+    items.forEach(function (item) {
+      var button = item.querySelector(".sp-faq-q");
+      var panel = item.querySelector(".sp-faq-a");
+      button.addEventListener("click", function () {
+        var open = button.getAttribute("aria-expanded") === "true";
+        button.setAttribute("aria-expanded", String(!open));
+        panel.style.height = open ? "0px" : panel.scrollHeight + "px";
+        item.classList.toggle("is-open", !open);
+      });
+      /* Keep an open panel correctly sized if the window reflows. */
+      window.addEventListener("resize", function () {
+        if (item.classList.contains("is-open")) panel.style.height = panel.scrollHeight + "px";
+      });
+    });
+
+    /* Live search across question and answer text. */
+    var debounce;
+    search.addEventListener("input", function () {
+      clearTimeout(debounce);
+      debounce = setTimeout(function () {
+        var term = search.value.trim().toLowerCase();
+        var shown = 0;
+        items.forEach(function (item) {
+          var match = !term || item.dataset.search.indexOf(term) > -1;
+          item.hidden = !match;
+          if (match) shown++;
+        });
+        none.hidden = shown > 0;
+      }, 120);
+    });
+
+    /* Hand the question to the chat widget's own send path — never a copy. */
+    list.addEventListener("click", function (e) {
+      var ask = e.target.closest(".sp-faq-ask");
+      if (!ask) return;
+      window.SPChat.open();
+      window.SPChat.send(ask.dataset.question);
+    });
+  })();
+</script>
+{% endblock %}
