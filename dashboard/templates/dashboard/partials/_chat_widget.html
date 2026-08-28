@@ -1,0 +1,57 @@
+{# Policy Assistant — demo stub, answers served from chat_responses.py #}
+<div class="sp-chat" id="spChat">
+
+  <button type="button" class="sp-chat-launcher" id="spChatLauncher"
+          aria-expanded="false" aria-controls="spChatPanel">
+    <svg class="sp-chat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-3.6-.7L3 21l1.9-4.9A8.2 8.2 0 0 1 4 11.5a8.4 8.4 0 0 1 9-8.4 8.4 8.4 0 0 1 8 8.4z"/>
+    </svg>
+    <span class="sp-chat-launcher-label">Policy Assistant</span>
+  </button>
+
+  <section class="sp-chat-panel" id="spChatPanel" aria-labelledby="spChatTitle" hidden>
+    <header class="sp-chat-header">
+      <div>
+        <h2 id="spChatTitle" class="sp-chat-title">Policy Assistant</h2>
+        <p class="sp-chat-subtitle mb-0">Answers on points, tiers and payouts</p>
+      </div>
+      <button type="button" class="sp-chat-close" id="spChatClose" aria-label="Close assistant">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+
+    <div class="sp-chat-log" id="spChatLog" role="log" aria-live="polite" aria-label="Conversation">
+      <div class="sp-msg sp-msg-bot is-visible">
+        <div class="sp-bubble">Hi {{ first_name }} — ask me anything about how the incentive program works. Pick a question below or type your own.</div>
+      </div>
+    </div>
+
+    <div class="sp-typing" id="spTyping" hidden aria-hidden="true">
+      <div class="sp-bubble sp-typing-bubble">
+        <span class="sp-dot"></span><span class="sp-dot"></span><span class="sp-dot"></span>
+      </div>
+    </div>
+
+    {# Pills are looped from FAQ_RESPONSES here and never restated in JS. #}
+    <div class="sp-chat-pills" id="spChatPills" aria-label="Suggested questions">
+      {% for item in faq %}
+      <button type="button" class="sp-pill">{{ item.question }}</button>
+      {% endfor %}
+    </div>
+
+    <form class="sp-chat-form" id="spChatForm" autocomplete="off">
+      {% csrf_token %}
+      <label class="visually-hidden" for="spChatInput">Ask a question</label>
+      <textarea class="sp-chat-input" id="spChatInput" rows="1"
+                placeholder="Ask about points, tiers or payouts"></textarea>
+      <button type="submit" class="sp-chat-send" id="spChatSend" disabled aria-label="Send message">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+        </svg>
+      </button>
+    </form>
+  </section>
+</div>

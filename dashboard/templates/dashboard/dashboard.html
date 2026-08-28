@@ -157,7 +157,7 @@
   </div>
 </div>
 
-<!-- AI Chatbot widget — Day 4 -->
+{% include "dashboard/partials/_chat_widget.html" %}
 {% endblock %}
 
 {% block extra_js %}
@@ -319,6 +319,145 @@
       point.addEventListener("focus", show);
       point.addEventListener("blur", hide);
       point.setAttribute("tabindex", "0");
+    });
+  })();
+</script>
+<script>
+  /* Policy Assistant. Every send — pill or typed — goes through sendMessage. */
+  (function () {
+    var root = document.getElementById("spChat");
+    var launcher = document.getElementById("spChatLauncher");
+    var panel = document.getElementById("spChatPanel");
+    var closeBtn = document.getElementById("spChatClose");
+    var log = document.getElementById("spChatLog");
+    var typing = document.getElementById("spTyping");
+    var pills = document.getElementById("spChatPills");
+    var form = document.getElementById("spChatForm");
+    var input = document.getElementById("spChatInput");
+    var send = document.getElementById("spChatSend");
+    var csrf = form.querySelector("[name=csrfmiddlewaretoken]").value;
+    var inFlight = false;
+
+    /* --- Open / close ----------------------------------------- */
+    function open() {
+      panel.hidden = false;
+      root.classList.add("sp-chat-open");
+      launcher.setAttribute("aria-expanded", "true");
+      requestAnimationFrame(function () { panel.classList.add("is-open"); });
+      input.focus();
+    }
+
+    function close() {
+      panel.classList.remove("is-open");
+      root.classList.remove("sp-chat-open");
+      launcher.setAttribute("aria-expanded", "false");
+      setTimeout(function () { panel.hidden = true; }, 220);
+      launcher.focus();
+    }
+
+    launcher.addEventListener("click", open);
+    closeBtn.addEventListener("click", close);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !panel.hidden) close();
+    });
+
+    /* --- Rendering -------------------------------------------- */
+    function addBubble(role, text) {
+      var wrap = document.createElement("div");
+      wrap.className = "sp-msg sp-msg-" + role;
+      var bubble = document.createElement("div");
+      bubble.className = "sp-bubble";
+      bubble.textContent = text;          /* never innerHTML */
+      wrap.appendChild(bubble);
+      log.appendChild(wrap);
+      requestAnimationFrame(function () { wrap.classList.add("is-visible"); });
+      scrollToLatest();
+      return wrap;
+    }
+
+    function scrollToLatest() {
+      log.scrollTo({ top: log.scrollHeight, behavior: "smooth" });
+    }
+
+    function setTyping(on) {
+      typing.hidden = !on;
+      if (on) scrollToLatest();
+    }
+
+    function setSendState() {
+      send.disabled = inFlight || !input.value.trim();
+    }
+
+    /* --- The single send path --------------------------------- */
+    function sendMessage(text) {
+      text = (text || "").trim();
+      if (!text || inFlight) return;
+
+      inFlight = true;
+      setSendState();
+      addBubble("user", text);
+      setTyping(true);
+
+      var started = Date.now();
+
+      /* Hold the indicator 700-1200ms so the reply does not land instantly. */
+      function settle(callback) {
+        var wait = Math.max(0, 700 + Math.random() * 500 - (Date.now() - started));
+        setTimeout(function () {
+          setTyping(false);
+          callback();
+          inFlight = false;
+          setSendState();
+        }, wait);
+      }
+
+      fetch("{% url 'dashboard:chat_api' %}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+        body: JSON.stringify({ message: text })
+      })
+        .then(function (response) {
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          return response.json();
+        })
+        .then(function (data) {
+          settle(function () { addBubble("bot", data.reply); });
+        })
+        .catch(function () {
+          settle(function () {
+            addBubble("bot", "I could not reach the policy service just then. Please try again in a moment.");
+          });
+        });
+    }
+
+    /* --- Inputs into that one path ---------------------------- */
+    pills.addEventListener("click", function (e) {
+      var pill = e.target.closest(".sp-pill");
+      if (!pill || inFlight) return;
+      pill.classList.add("is-used");     /* pills stay clickable, just dimmed */
+      sendMessage(pill.textContent);
+    });
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var text = input.value;
+      input.value = "";
+      input.style.height = "auto";
+      setSendState();
+      sendMessage(text);
+    });
+
+    input.addEventListener("input", function () {
+      setSendState();
+      input.style.height = "auto";
+      input.style.height = input.scrollHeight + "px";
+    });
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
     });
   })();
 </script>

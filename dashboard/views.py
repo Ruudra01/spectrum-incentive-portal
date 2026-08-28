@@ -1,6 +1,10 @@
-from django.shortcuts import render
+import json
 
-from . import mock_data
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.views.decorators.http import require_POST
+
+from . import chat_responses, mock_data
 
 
 def _progress(points):
@@ -82,5 +86,23 @@ def agent_dashboard(request):
             ],
             "weekly_points": mock_data.WEEKLY_POINTS,
             "sparkline": _sparkline(mock_data.WEEKLY_POINTS),
+            "faq": chat_responses.FAQ_RESPONSES,
         },
     )
+
+
+@require_POST
+def chat_api(request):
+    """Demo policy assistant. Matches canned answers; no model is called."""
+    try:
+        payload = json.loads(request.body or b"{}")
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({"error": "Malformed JSON body."}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"error": "Expected a JSON object."}, status=400)
+
+    message = (payload.get("message") or "").strip()
+    if not message:
+        return JsonResponse({"error": "A message is required."}, status=400)
+
+    return JsonResponse({"reply": chat_responses.match_question(message)})
