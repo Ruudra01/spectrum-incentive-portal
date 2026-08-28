@@ -1,0 +1,325 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Dashboard — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    {# 1. Page header #}
+    <header class="sp-page-header">
+      <div>
+        <h1>Good to see you, {{ first_name }}.</h1>
+        <p class="sp-muted sp-small mb-0 mt-1">{{ agent.employee_id }} &middot; {{ agent.region }} &middot; {{ agent.team }}</p>
+      </div>
+      <p class="sp-muted sp-small mb-0 ms-auto text-lg-end">{% now "l, F j, Y" %}</p>
+    </header>
+
+    {# 2. KPI row #}
+    <div class="row g-3 mt-1">
+      {% for kpi in kpi_stats %}
+      <div class="col-6 col-lg-3">
+        <div class="sp-card sp-kpi">
+          <p class="sp-kpi-label">{{ kpi.label }}</p>
+          <p class="sp-kpi-value mb-2">
+            <span data-kpi="{{ kpi.value }}" data-count-decimals="{{ kpi.decimals }}">0</span>{% if kpi.unit %}<span class="sp-kpi-unit">{{ kpi.unit }}</span>{% endif %}
+          </p>
+          <p class="sp-delta sp-delta-{{ kpi.direction }} mb-0">{{ kpi.delta }}% vs last month</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    {# 3. Two-column area #}
+    <div class="row g-3 mt-1">
+
+      {# LEFT — leaderboard #}
+      <div class="col-lg-8">
+        <section class="sp-card" id="spBoard" aria-labelledby="spBoardTitle">
+          <div class="sp-toolbar">
+            <h2 id="spBoardTitle" class="me-auto mb-0">Leaderboard</h2>
+            <label class="visually-hidden" for="spFilter">Filter agents by name or region</label>
+            <input type="search" id="spFilter" class="sp-input" placeholder="Filter by name or region" autocomplete="off">
+          </div>
+
+          <div class="sp-toolbar">
+            <div class="sp-chips" id="spChips" role="group" aria-label="Filter by region">
+              {% for region in regions %}
+              <button type="button" class="sp-chip" data-region="{{ region }}" aria-pressed="false">{{ region }}</button>
+              {% endfor %}
+            </div>
+            <p class="sp-muted sp-small mb-0 ms-auto" id="spCount" role="status">Showing {{ rows|length }} of {{ rows|length }} agents</p>
+          </div>
+
+          <div class="sp-table-wrap">
+            <table class="sp-table" id="spTable">
+              <thead>
+                <tr>
+                  <th scope="col" data-key="rank" aria-sort="ascending">
+                    <button type="button" class="sp-sort">Rank <span class="sp-caret" aria-hidden="true">&#9662;</span></button>
+                  </th>
+                  <th scope="col" data-key="name">
+                    <button type="button" class="sp-sort">Agent <span class="sp-caret" aria-hidden="true">&#9662;</span></button>
+                  </th>
+                  <th scope="col" data-key="region">
+                    <button type="button" class="sp-sort">Region <span class="sp-caret" aria-hidden="true">&#9662;</span></button>
+                  </th>
+                  <th scope="col" data-key="points" class="sp-num">
+                    <button type="button" class="sp-sort sp-sort-num">Points <span class="sp-caret" aria-hidden="true">&#9662;</span></button>
+                  </th>
+                  <th scope="col" data-key="tier">
+                    <button type="button" class="sp-sort">Tier <span class="sp-caret" aria-hidden="true">&#9662;</span></button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="spBody">
+                {% for row in rows %}
+                <tr class="sp-row{% if row.is_current %} sp-row-current{% endif %}"
+                    role="button" tabindex="0" aria-expanded="false" aria-controls="sp-detail-{{ row.id }}"
+                    data-rank="{{ row.rank }}" data-name="{{ row.name }}" data-region="{{ row.region }}"
+                    data-points="{{ row.points }}" data-tier="{{ row.tier.min_points }}">
+                  <td class="sp-num">{{ row.rank }}</td>
+                  <td>{{ row.name }}{% if row.is_current %} <span class="sp-muted sp-small">(you)</span>{% endif %}</td>
+                  <td class="sp-muted">{{ row.region }}</td>
+                  <td class="sp-num">{{ row.points }}</td>
+                  <td><span class="sp-tier sp-tier-{{ row.tier.slug }}">{{ row.tier.name }}</span></td>
+                </tr>
+                <tr class="sp-detail-row" id="sp-detail-{{ row.id }}">
+                  <td colspan="5">
+                    <div class="sp-detail-inner">
+                      <div class="sp-detail-body">
+                        <strong>{{ row.name }}</strong> &middot; {{ row.tier.name }} tier &middot; {{ row.points }} points
+                        <div class="sp-muted mt-1">
+                          {% if row.next_tier %}
+                            {{ row.next_tier.needed }} points to {{ row.next_tier.name }} &middot; {{ row.next_tier.percent }}% through {{ row.tier.name }}
+                          {% else %}
+                            Top tier reached.
+                          {% endif %}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+                <tr class="sp-empty-row" id="spEmpty" hidden>
+                  <td colspan="5">No agents match</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      {# RIGHT — points/tier and sparkline #}
+      <div class="col-lg-4">
+
+        <div class="sp-card p-4">
+          <p class="sp-kpi-label mb-1">Your points balance</p>
+          <p class="sp-balance mb-2"><span data-kpi="{{ agent.points }}">0</span></p>
+          <p class="mb-3"><span class="sp-tier sp-tier-{{ agent_tier.slug }}">{{ agent_tier.name }}</span></p>
+
+          {% if next_tier %}
+            <div class="sp-progress" role="progressbar" aria-valuenow="{{ next_tier.percent }}"
+                 aria-valuemin="0" aria-valuemax="100"
+                 aria-label="Progress toward {{ next_tier.name }}">
+              <div class="sp-progress-fill" data-fill="{{ next_tier.percent }}"></div>
+            </div>
+            <p class="sp-muted sp-small mb-0 mt-2">{{ next_tier.needed }} points to {{ next_tier.name }}</p>
+          {% else %}
+            <p class="sp-muted sp-small mb-0">Top tier reached</p>
+          {% endif %}
+        </div>
+
+        <div class="sp-card p-4 mt-3">
+          <p class="sp-kpi-label mb-3">Points, last 8 weeks</p>
+          <div class="position-relative" id="spSpark">
+            <svg class="sp-spark" viewBox="0 0 260 64" preserveAspectRatio="none" role="img"
+                 aria-label="Weekly points from {{ weekly_points|first }} to {{ weekly_points|last }} over eight weeks">
+              <polyline class="sp-spark-line" points="{% for point in sparkline %}{{ point.x }},{{ point.y }} {% endfor %}"/>
+              {% for point in sparkline %}
+              <g class="sp-spark-point" data-x="{{ point.x }}" data-y="{{ point.y }}"
+                 data-label="Week {{ point.week }}: {{ point.value }} pts">
+                <circle class="sp-spark-dot" cx="{{ point.x }}" cy="{{ point.y }}" r="2.5"/>
+                <circle class="sp-spark-hit" cx="{{ point.x }}" cy="{{ point.y }}" r="12"/>
+              </g>
+              {% endfor %}
+            </svg>
+            <div class="sp-spark-tooltip" id="spSparkTip" role="status"></div>
+          </div>
+          <p class="sp-muted sp-small mb-0 mt-2">{{ agent.points_this_week }} points this week</p>
+        </div>
+
+        <!-- AI Avatar Explainer — Day 5 -->
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- AI Chatbot widget — Day 4 -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Dashboard widgets. Vanilla JS over the server-rendered table. */
+  (function () {
+    /* --- KPI + balance count-up ------------------------------- */
+    document.querySelectorAll("[data-kpi]").forEach(function (el) {
+      SP.animateCount(el, el.dataset.kpi);
+    });
+
+    /* --- Tier progress bar: 0 to its width on load ------------- */
+    var fill = document.querySelector(".sp-progress-fill");
+    if (fill) {
+      requestAnimationFrame(function () { fill.style.width = fill.dataset.fill + "%"; });
+    }
+
+    /* --- Leaderboard ------------------------------------------ */
+    var table = document.getElementById("spTable");
+    var body = document.getElementById("spBody");
+    var empty = document.getElementById("spEmpty");
+    var count = document.getElementById("spCount");
+    var filterInput = document.getElementById("spFilter");
+    var chipBox = document.getElementById("spChips");
+
+    /* Each visible row is paired with its detail row so both move together. */
+    var pairs = Array.prototype.slice.call(body.querySelectorAll(".sp-row")).map(function (row) {
+      return { row: row, detail: row.nextElementSibling };
+    });
+    var total = pairs.length;
+    var sortKey = "rank";
+    var sortAsc = true;
+    var openDetail = null;
+
+    function value(row, key) {
+      var raw = row.dataset[key];
+      return key === "name" || key === "region" ? raw.toLowerCase() : Number(raw);
+    }
+
+    function applySort() {
+      pairs.sort(function (a, b) {
+        var x = value(a.row, sortKey);
+        var y = value(b.row, sortKey);
+        if (x === y) return value(a.row, "rank") - value(b.row, "rank");
+        return (x > y ? 1 : -1) * (sortAsc ? 1 : -1);
+      });
+      pairs.forEach(function (pair) { body.append(pair.row, pair.detail); });
+      body.append(empty);
+    }
+
+    function applyFilter() {
+      var term = filterInput.value.trim().toLowerCase();
+      var regions = Array.prototype.slice
+        .call(chipBox.querySelectorAll('[aria-pressed="true"]'))
+        .map(function (chip) { return chip.dataset.region; });
+
+      var shown = 0;
+      pairs.forEach(function (pair) {
+        var data = pair.row.dataset;
+        var matchesTerm = !term ||
+          data.name.toLowerCase().indexOf(term) > -1 ||
+          data.region.toLowerCase().indexOf(term) > -1;
+        var matchesRegion = !regions.length || regions.indexOf(data.region) > -1;
+        var visible = matchesTerm && matchesRegion;
+
+        pair.row.hidden = !visible;
+        pair.detail.hidden = !visible;
+        if (!visible && pair.detail === openDetail) closeDetail();
+        if (visible) shown++;
+      });
+
+      empty.hidden = shown > 0;
+      count.textContent = "Showing " + shown + " of " + total + " agents";
+    }
+
+    /* Brief fade so a reorder or filter change is legible. */
+    function refresh(sorted) {
+      body.style.opacity = ".35";
+      setTimeout(function () {
+        if (sorted) applySort();
+        applyFilter();
+        body.style.opacity = "1";
+      }, 120);
+    }
+
+    table.querySelectorAll("th[data-key]").forEach(function (th) {
+      th.querySelector(".sp-sort").addEventListener("click", function () {
+        var key = th.dataset.key;
+        sortAsc = key === sortKey ? !sortAsc : true;
+        sortKey = key;
+        table.querySelectorAll("th[data-key]").forEach(function (other) {
+          other.removeAttribute("aria-sort");
+        });
+        th.setAttribute("aria-sort", sortAsc ? "ascending" : "descending");
+        refresh(true);
+      });
+    });
+
+    var debounce;
+    filterInput.addEventListener("input", function () {
+      clearTimeout(debounce);
+      debounce = setTimeout(applyFilter, 120);
+    });
+
+    chipBox.addEventListener("click", function (e) {
+      var chip = e.target.closest(".sp-chip");
+      if (!chip) return;
+      chip.setAttribute("aria-pressed", chip.getAttribute("aria-pressed") === "true" ? "false" : "true");
+      applyFilter();
+    });
+
+    /* --- Expandable rows, one open at a time ------------------- */
+    function closeDetail() {
+      if (!openDetail) return;
+      openDetail.classList.remove("is-open");
+      openDetail.previousElementSibling.setAttribute("aria-expanded", "false");
+      openDetail = null;
+    }
+
+    function toggleDetail(row) {
+      var detail = row.nextElementSibling;
+      if (detail === openDetail) {
+        closeDetail();
+        return;
+      }
+      closeDetail();
+      detail.classList.add("is-open");
+      row.setAttribute("aria-expanded", "true");
+      openDetail = detail;
+    }
+
+    pairs.forEach(function (pair) {
+      pair.row.addEventListener("click", function () { toggleDetail(pair.row); });
+      pair.row.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggleDetail(pair.row);
+        }
+      });
+    });
+
+    /* --- Sparkline tooltip ------------------------------------ */
+    var spark = document.getElementById("spSpark");
+    var tip = document.getElementById("spSparkTip");
+    spark.querySelectorAll(".sp-spark-point").forEach(function (point) {
+      function show() {
+        point.classList.add("is-active");
+        tip.textContent = point.dataset.label;
+        tip.style.left = (point.dataset.x / 260 * 100) + "%";
+        tip.style.top = (point.dataset.y / 64 * 100) + "%";
+        tip.classList.add("is-visible");
+      }
+      function hide() {
+        point.classList.remove("is-active");
+        tip.classList.remove("is-visible");
+      }
+      point.addEventListener("mouseenter", show);
+      point.addEventListener("mouseleave", hide);
+      point.addEventListener("focus", show);
+      point.addEventListener("blur", hide);
+      point.setAttribute("tabindex", "0");
+    });
+  })();
+</script>
+{% endblock %}

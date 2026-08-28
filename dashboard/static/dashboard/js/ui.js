@@ -4,19 +4,22 @@
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* Counts up to an integer with an ease-out curve. */
-  function animateCount(el, target, duration) {
+  /* Counts up to a number with an ease-out curve. Decimal places come from
+     data-count-decimals so rates and scores do not round to integers. */
+  function animateCount(el, target, duration, decimals) {
     target = Number(target);
     duration = duration || 1400;
+    decimals = decimals === undefined ? parseInt(el.dataset.countDecimals || "0", 10) : decimals;
+    var format = { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
     if (reduced) {
-      el.textContent = target.toLocaleString();
+      el.textContent = target.toLocaleString(undefined, format);
       return;
     }
     var start = null;
     (function step(now) {
       if (start === null) start = now;
       var p = Math.min((now - start) / duration, 1);
-      el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3))).toLocaleString();
+      el.textContent = (target * (1 - Math.pow(1 - p, 3))).toLocaleString(undefined, format);
       if (p < 1) requestAnimationFrame(step);
     })(performance.now());
   }

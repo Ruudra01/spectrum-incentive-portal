@@ -23,7 +23,7 @@
       </button>
 
       <nav class="sp-nav" id="spNavPanel" aria-label="Main">
-        <a class="sp-nav-link{% if active == 'landing' %} is-active{% endif %}" href="{{ landing_url }}">Dashboard</a>
+        <a class="sp-nav-link{% if active == 'dashboard' %} is-active{% endif %}" href="{% url 'dashboard:dashboard' %}">Dashboard</a>
         <a class="sp-nav-link" href="#">Leaderboard</a>
         <a class="sp-nav-link" href="#">Support</a>
       </nav>
