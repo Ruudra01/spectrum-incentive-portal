@@ -1,0 +1,287 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+
+{% block title %}Spectrum Incentive Portal — Earn, climb, compete{% endblock %}
+
+{% block extra_css %}
+<style>
+  .sp-section { padding: 4.5rem 0; }
+  .sp-section + .sp-section { border-top: 1px solid var(--sp-border); }
+  .sp-lede { font-size: var(--sp-fs-2); font-weight: 400; color: var(--sp-muted); max-width: 34rem; }
+
+  /* Hero words fade and rise in sequence via transition-delay. */
+  .sp-hero h1 { max-width: 20ch; }
+  .sp-hero-word {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 520ms ease, transform 520ms ease;
+  }
+  .sp-hero.is-loaded .sp-hero-word { opacity: 1; transform: none; }
+  .sp-hero-tail { opacity: 0; transform: translateY(10px); transition: opacity 520ms ease 620ms, transform 520ms ease 620ms; }
+  .sp-hero.is-loaded .sp-hero-tail { opacity: 1; transform: none; }
+
+  /* Tier explorer */
+  .sp-tablist { position: relative; display: flex; gap: .25rem; border-bottom: 1px solid var(--sp-border); }
+  .sp-tab {
+    flex: 1;
+    padding: .9rem .5rem;
+    background: none;
+    border: 0;
+    color: var(--sp-muted);
+    font-size: var(--sp-fs-4);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    cursor: pointer;
+    transition: color var(--sp-ease);
+  }
+  .sp-tab:hover { color: var(--sp-text); }
+  .sp-tab[aria-selected="true"] { color: var(--sp-text); font-weight: 600; }
+  .sp-tab-indicator {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    width: 0;
+    background-color: var(--sp-blue);
+    transition: transform 220ms cubic-bezier(.4, 0, .2, 1), width 220ms cubic-bezier(.4, 0, .2, 1);
+  }
+  .sp-tabpanel { padding: 2rem 0 0; transition: opacity 200ms ease; }
+  .sp-tabpanel.is-swapping { opacity: 0; }
+  .sp-perks { list-style: none; margin: 0; padding: 0; }
+  .sp-perks li { padding: .6rem 0; border-bottom: 1px solid var(--sp-border); }
+  .sp-perks li:last-child { border-bottom: 0; }
+
+  .sp-stat-value { font-size: 4rem; font-weight: 600; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 575.98px) {
+    .sp-section { padding: 3rem 0; }
+    .sp-stat-value { font-size: 2.75rem; }
+    .sp-tab { letter-spacing: .06em; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# 1. Hero #}
+<section class="sp-section sp-hero" id="spHero">
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-8">
+        <p class="sp-eyebrow sp-hero-word" style="transition-delay: 0ms">Field Incentive Program</p>
+        <h1 class="mt-2">
+          <span class="sp-hero-word" style="transition-delay: 80ms">Every</span>
+          <span class="sp-hero-word" style="transition-delay: 160ms">install</span>
+          <span class="sp-hero-word" style="transition-delay: 240ms">counts</span>
+          <span class="sp-hero-word" style="transition-delay: 320ms">toward</span>
+          <span class="sp-hero-word" style="transition-delay: 400ms">something.</span>
+        </h1>
+        <div class="sp-hero-tail">
+          <p class="sp-lede mt-3">
+            Track your points, watch your tier, and see where you stand against the field —
+            updated every time a job closes.
+          </p>
+          <p class="mt-4 mb-0 d-flex flex-wrap gap-2">
+            <a class="sp-btn" href="{% url 'dashboard:landing' %}">Open my dashboard</a>
+            <a class="sp-btn sp-btn-ghost" href="#tier-explorer">Explore the tiers</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# 2. Feature cards #}
+<section class="sp-section">
+  <div class="container">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="sp-card u-reveal h-100 p-4">
+          <p class="sp-eyebrow mb-2">01</p>
+          <h2>Earn points</h2>
+          <p class="sp-muted mb-0 mt-2">
+            {{ agent.points_this_week }} points landed for the average agent last week.
+            Installs, upsells and CSAT all feed the same running total.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="sp-card u-reveal h-100 p-4">
+          <p class="sp-eyebrow mb-2">02</p>
+          <h2>Climb tiers</h2>
+          <p class="sp-muted mb-0 mt-2">
+            {% for tier in tiers %}{{ tier.name }} starts at {{ tier.min_points }} points{% if not forloop.last %}, {% endif %}{% endfor %}.
+            Each step up unlocks better routing and a bigger commission multiplier.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="sp-card u-reveal h-100 p-4">
+          <p class="sp-eyebrow mb-2">03</p>
+          <h2>Compete</h2>
+          <p class="sp-muted mb-0 mt-2">
+            {% with tail=leaderboard|last %}The top {{ leaderboard|length }} agents are ranked live, from
+            {{ leaderboard.0.points }} points down to {{ tail.points }}. You are currently rank {{ agent.rank }}.{% endwith %}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# 3. Interactive tier explorer #}
+<section class="sp-section" id="tier-explorer">
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-7">
+        <p class="sp-eyebrow">Tier explorer</p>
+        <h1 class="mt-2 mb-4">Know exactly what the next tier is worth.</h1>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-8">
+        <div class="sp-tablist" role="tablist" aria-label="Reward tiers" id="spTablist">
+          {% for tier in tiers %}
+          <button type="button"
+                  class="sp-tab"
+                  role="tab"
+                  id="sp-tab-{{ tier.slug }}"
+                  data-slug="{{ tier.slug }}"
+                  aria-controls="spTierPanel"
+                  aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                  tabindex="{% if forloop.first %}0{% else %}-1{% endif %}">{{ tier.name }}</button>
+          {% endfor %}
+          <span class="sp-tab-indicator" id="spTabIndicator" aria-hidden="true"></span>
+        </div>
+
+        <div class="sp-tabpanel" role="tabpanel" id="spTierPanel"
+             aria-labelledby="sp-tab-{{ tiers.0.slug }}" tabindex="0"></div>
+      </div>
+
+      <div class="col-lg-4 mt-4 mt-lg-0">
+        <div class="sp-card p-4 h-100">
+          <p class="sp-eyebrow mb-2">Your standing</p>
+          <p class="mb-1"><span class="sp-tier sp-tier-{{ agent_tier.slug }}">{{ agent_tier.name }}</span></p>
+          <p class="sp-muted mt-3 mb-0">
+            {{ agent.points }} points.
+            {% if next_tier %}
+              {{ next_tier.needed }} more to reach {{ next_tier.name }} — {{ next_tier.percent }}% of the way there.
+            {% else %}
+              Top tier reached.
+            {% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# 4. Headline statistic #}
+<section class="sp-section">
+  <div class="container text-center">
+    <p class="sp-stat-value u-reveal" data-count="{{ headline_stat.value }}" data-count-duration="1600">0</p>
+    <p class="sp-lede mx-auto mt-3 mb-0">{{ headline_stat.label }}</p>
+  </div>
+</section>
+
+{# 5. Closing CTA #}
+<section class="sp-section">
+  <div class="container">
+    <div class="sp-card u-reveal p-5 text-center">
+      <h1 class="mb-3">Your points are already waiting.</h1>
+      <p class="sp-lede mx-auto mb-4">
+        Sign in to see this week's total, your tier progress and where you sit on the board.
+      </p>
+      <a class="sp-btn" href="{% url 'dashboard:landing' %}">Open my dashboard</a>
+    </div>
+  </div>
+</section>
+
+{{ tiers|json_script:"sp-tiers-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Tier explorer: tablist state, 200ms panel crossfade, sliding indicator. */
+  (function () {
+    var tiers = JSON.parse(document.getElementById("sp-tiers-data").textContent);
+    var tablist = document.getElementById("spTablist");
+    var tabs = Array.prototype.slice.call(tablist.querySelectorAll(".sp-tab"));
+    var indicator = document.getElementById("spTabIndicator");
+    var panel = document.getElementById("spTierPanel");
+    var current = 0;
+
+    function range(tier) {
+      return tier.max_points === null
+        ? tier.min_points.toLocaleString() + " points and up"
+        : tier.min_points.toLocaleString() + " – " + tier.max_points.toLocaleString() + " points";
+    }
+
+    function render(tier) {
+      var perks = tier.perks.map(function (perk) {
+        var li = document.createElement("li");
+        li.textContent = perk;
+        return li.outerHTML;
+      }).join("");
+      panel.innerHTML =
+        '<p class="sp-eyebrow mb-2">' + range(tier) + "</p>" +
+        "<h2>" + tier.name + "</h2>" +
+        '<ul class="sp-perks mt-3">' + perks + "</ul>";
+    }
+
+    function moveIndicator(tab) {
+      indicator.style.width = tab.offsetWidth + "px";
+      indicator.style.transform = "translateX(" + tab.offsetLeft + "px)";
+    }
+
+    function select(index, focus) {
+      var tab = tabs[index];
+      tabs.forEach(function (t, i) {
+        t.setAttribute("aria-selected", String(i === index));
+        t.tabIndex = i === index ? 0 : -1;
+      });
+      panel.setAttribute("aria-labelledby", tab.id);
+      moveIndicator(tab);
+
+      if (index === current && panel.innerHTML) return;
+      current = index;
+      panel.classList.add("is-swapping");
+      setTimeout(function () {
+        render(tiers[index]);
+        panel.classList.remove("is-swapping");
+      }, 200);
+      if (focus) tab.focus();
+    }
+
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener("click", function () { select(i, false); });
+    });
+
+    tablist.addEventListener("keydown", function (e) {
+      var step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (step) {
+        e.preventDefault();
+        select((current + step + tabs.length) % tabs.length, true);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        select(0, true);
+      } else if (e.key === "End") {
+        e.preventDefault();
+        select(tabs.length - 1, true);
+      }
+    });
+
+    render(tiers[0]);
+    moveIndicator(tabs[0]);
+    window.addEventListener("resize", function () { moveIndicator(tabs[current]); });
+
+    /* Hero entrance: one extra frame so the pre-transition state paints first. */
+    requestAnimationFrame(function () {
+      document.getElementById("spHero").classList.add("is-loaded");
+    });
+  })();
+</script>
+{% endblock %}
