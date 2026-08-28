@@ -663,6 +663,14 @@ def manager_programs(request):
     for program in programs:
         program["metric_label"] = mock_data.SUCCESS_METRICS_BY_CODE.get(
             program["success_metric"], {}).get("label", "—")
+        # Real dates so the template can format them readably, and a budget
+        # with thousands separators — "$45000" is hard to scan in a column.
+        for field in ("start_date", "end_date"):
+            try:
+                program[f"{field}_dt"] = date.fromisoformat(program[field])
+            except (TypeError, ValueError):
+                program[f"{field}_dt"] = None
+        program["budget_display"] = f"{program['budget_estimate']:,}"
         if program["status"] == store.PROGRAM_APPROVED:
             if program["start_date"] > today:
                 program["phase"] = "Scheduled"

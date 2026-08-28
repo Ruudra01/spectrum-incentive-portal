@@ -43,7 +43,7 @@
       </div>
 
       <div class="sp-table-wrap">
-        <table class="sp-table" id="spProgramTable">
+        <table class="sp-table sp-program-table" id="spProgramTable">
           <thead>
             <tr>
               <th scope="col">Program</th>
@@ -62,14 +62,20 @@
                 <strong>{{ program.name }}</strong>
                 <p class="sp-muted sp-small mb-0">{{ program.metric_label }}</p>
               </td>
-              <td class="sp-muted">{{ program.start_date }} → {{ program.end_date }}</td>
-              <td>
-                <span class="sp-status sp-status-{{ program.status }}">{{ program.status|cut:"_"|title }}</span>
-                {% if program.phase %}<span class="sp-muted sp-small d-block mt-1">{{ program.phase }}</span>{% endif %}
+              <td class="sp-program-dates">
+                {% if program.start_date_dt %}
+                <span class="sp-date-from">{{ program.start_date_dt|date:"M j, Y" }}</span>
+                <span class="sp-date-sep" aria-hidden="true">&rarr;</span>
+                <span class="sp-date-to">{{ program.end_date_dt|date:"M j, Y" }}</span>
+                {% else %}<span class="sp-muted">Not set</span>{% endif %}
               </td>
-              <td class="sp-num">${{ program.budget_estimate }}</td>
-              <td class="sp-num">{{ program.expected_participants }}</td>
               <td>
+                {% include "dashboard/partials/_status_pill.html" with status=program.status %}
+                {% if program.phase %}<span class="sp-program-phase">{{ program.phase }}</span>{% endif %}
+              </td>
+              <td class="sp-num sp-program-budget"><span class="sp-money-sign">$</span>{{ program.budget_display }}</td>
+              <td class="sp-num">{{ program.expected_participants }}</td>
+              <td class="sp-program-action">
                 {% if program.status in editable_statuses %}
                 <a class="btn-sp-secondary sp-btn-sm" href="?edit={{ program.id }}">Edit</a>
                 {% else %}

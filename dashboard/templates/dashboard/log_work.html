@@ -120,6 +120,17 @@
           <button type="button" class="btn-sp-primary" id="spFocusForm">Add an entry</button>
         </div>
         {% endfor %}
+
+        {# Submit sits directly after the last entry at every breakpoint. #}
+        {% if summary.draft_count %}
+        <div class="sp-submitbar" id="spSubmitBar">
+          <span class="sp-submitbar-text">
+            {{ summary.draft_count }} entr{{ summary.draft_count|pluralize:"y,ies" }} ready to submit
+            &middot; {{ summary.draft_points }} points
+          </span>
+          <button type="button" class="btn-sp-primary" id="spOpenSubmit">Submit day for approval</button>
+        </div>
+        {% endif %}
       </div>
 
       {# ---- Add entry ---- #}
@@ -241,18 +252,6 @@
       </div>
       </div>
 
-      {# ---- Submit the day ---- #}
-      <div class="sp-log-submit">
-        {% if summary.draft_count %}
-        <div class="sp-submitbar" id="spSubmitBar">
-          <span class="sp-submitbar-text">
-            {{ summary.draft_count }} entr{{ summary.draft_count|pluralize:"y,ies" }} ready to submit
-            &middot; {{ summary.draft_points }} points
-          </span>
-          <button type="button" class="btn-sp-primary" id="spOpenSubmit">Submit day for approval</button>
-        </div>
-        {% endif %}
-      </div>
 
     </div>
   </div>

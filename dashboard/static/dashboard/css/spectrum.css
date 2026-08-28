@@ -1681,22 +1681,23 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
   display: grid;
   gap: 1rem;
   grid-template-columns: 5fr 7fr;
+  /* The KPI row spans both columns so all four tiles sit on one line;
+     everything else falls below it. The submit bar now lives inside the
+     entries column, directly after the last entry. */
   grid-template-areas:
-    "summary entries"
-    "form    entries"
-    "form    submit";
+    "summary summary"
+    "form    entries";
   align-items: start;
 }
 .sp-log-summary { grid-area: summary; }
 .sp-log-form { grid-area: form; }
 .sp-log-entries { grid-area: entries; }
-.sp-log-submit { grid-area: submit; }
 
 /* Phones see what they've done before being asked to add more. */
 @media (max-width: 991.98px) {
   .sp-log-grid {
     grid-template-columns: 1fr;
-    grid-template-areas: "summary" "entries" "form" "submit";
+    grid-template-areas: "summary" "entries" "form";
   }
 }
 
@@ -2037,3 +2038,60 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
    cover Director program + approval statuses one-for-one, so nothing new
    is added here — reuse the canonical rules rather than redefining them.
    --------------------------------------------------------------------- */
+
+
+/* ===============================================================
+   Programs table — scoped so no other .sp-table is affected.
+   The base .sp-table zeroes thead padding because those tables nest a
+   padded .sp-sort button; these headers are plain text, so they need it back.
+   =============================================================== */
+.sp-program-table thead th {
+  padding: .85rem 1.25rem;
+  font-size: var(--sp-fs-4);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--sp-muted);
+  white-space: nowrap;
+}
+.sp-program-table tbody td {
+  padding: 1.1rem 1.25rem;      /* room for the two-line Program cell */
+  vertical-align: top;
+}
+.sp-program-table tbody tr { transition: background-color var(--sp-ease); }
+.sp-program-table tbody tr:hover { background-color: var(--sp-bg); }
+.sp-program-table tbody tr:last-child td { border-bottom: 0; }
+
+/* Program name + its metric caption */
+.sp-program-table tbody td:first-child { min-width: 220px; white-space: normal; }
+.sp-program-table tbody td:first-child strong {
+  display: block;
+  color: var(--sp-navy);
+  line-height: 1.35;
+}
+
+/* Dates read as a range, wrapping instead of forcing overflow */
+.sp-program-dates { white-space: normal; color: var(--sp-muted); font-variant-numeric: tabular-nums; }
+.sp-date-sep { padding: 0 .3rem; color: var(--sp-border-strong); }
+
+/* Phase sits under the status pill rather than crowding it */
+.sp-program-phase {
+  display: block;
+  margin-top: .4rem;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--sp-muted);
+}
+
+/* Money aligns on the digits, not the sign */
+.sp-program-budget { font-variant-numeric: tabular-nums; }
+.sp-money-sign { color: var(--sp-muted); margin-right: .1rem; }
+
+.sp-program-action { text-align: right; white-space: nowrap; }
+
+@media (max-width: 767.98px) {
+  .sp-program-table thead th,
+  .sp-program-table tbody td { padding: .8rem .9rem; }
+  .sp-program-table tbody td:first-child { min-width: 160px; }
+}
