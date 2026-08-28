@@ -1868,3 +1868,172 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
 
 .sp-status-pending { color: var(--sp-blue); }
 .sp-status-draft { color: var(--sp-muted); }
+
+/* ===============================================================
+   Director workspace
+   =============================================================== */
+
+/* --- ROI tracker ------------------------------------------------ */
+.sp-roi { padding: 1.5rem; }
+.sp-roi-headline {
+  font-size: 2.75rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.sp-roi-lines { list-style: none; margin: 1.25rem 0 0; padding: 0; }
+.sp-roi-line {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: .6rem 0;
+  border-bottom: 1px solid var(--sp-border);
+}
+.sp-roi-line:last-child { border-bottom: 0; }
+.sp-roi-label { font-size: var(--sp-fs-3); color: var(--sp-navy); }
+.sp-roi-detail { display: block; margin-top: .15rem; font-size: 12px; color: var(--sp-muted); }
+.sp-roi-amount { margin-left: auto; text-align: right; font-variant-numeric: tabular-nums; }
+
+.sp-roi-totals { margin-top: .5rem; padding-top: .75rem; border-top: 1px solid var(--sp-border-strong); }
+.sp-roi-totals .sp-roi-line { padding: .3rem 0; border-bottom: 0; }
+.sp-roi-net { font-weight: 600; }
+
+.sp-modelled { font-size: 12px; font-style: italic; color: var(--sp-muted); }
+
+/* --- Manager comparison table: expanded row detail --------------- */
+.sp-mgr-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+@media (max-width: 767.98px) { .sp-mgr-detail { grid-template-columns: 1fr; } }
+
+.sp-tierbar { display: flex; height: 8px; overflow: hidden; border-radius: 4px; background-color: var(--sp-border); }
+.sp-tierbar-seg { height: 100%; transition: width var(--sp-ease); }
+.sp-tierbar-bronze { background-color: var(--tier-bronze); }
+.sp-tierbar-silver { background-color: var(--tier-silver); }
+.sp-tierbar-gold   { background-color: var(--tier-gold); }
+
+/* --- Territory trend chart ---------------------------------------- */
+.sp-terr-chart { display: block; width: 100%; height: auto; overflow: visible; }
+.sp-terr-line { fill: none; stroke: var(--sp-blue); stroke-width: 1.75; }
+.sp-terr-line-alt { fill: none; stroke: var(--sp-navy); stroke-width: 1.5; stroke-dasharray: 5 3; }
+
+.sp-legend-row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; font-size: var(--sp-fs-4); color: var(--sp-muted); }
+.sp-legend-key { display: inline-block; width: 18px; height: 0; margin-right: .35rem; vertical-align: middle; border-top: 2px solid; }
+.sp-legend-key-solid { border-top-style: solid; border-top-color: var(--sp-blue); }
+.sp-legend-key-dashed { border-top-style: dashed; border-top-color: var(--sp-navy); }
+
+/* --- Program comparison: selection strip --------------------------- */
+.sp-select-strip { display: flex; gap: .75rem; overflow-x: auto; padding: .25rem .25rem 1rem; }
+.sp-select-card {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 200px;
+  padding: 1rem;
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-radius);
+  background-color: var(--sp-white);
+  cursor: pointer;
+  transition: border-color var(--sp-ease), background-color var(--sp-ease);
+}
+.sp-select-card:hover { border-color: var(--sp-border-strong); }
+.sp-select-card.is-selected { border-width: 2px; border-color: var(--sp-blue); background-color: var(--sp-tint); }
+.sp-select-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--sp-blue);
+  color: var(--sp-white);
+  font-size: 11px;
+  font-weight: 600;
+}
+.sp-select-name { font-size: var(--sp-fs-3); font-weight: 600; color: var(--sp-navy); }
+.sp-select-meta { margin-top: .2rem; font-size: 12px; color: var(--sp-muted); }
+
+.sp-limit-note { font-size: 12px; color: var(--sp-muted); }
+.sp-limit-note.is-hit { color: var(--sp-warning); font-weight: 600; }
+
+/* --- Program comparison: table ------------------------------------- */
+.sp-compare-wrap { overflow-x: auto; }
+.sp-compare { width: 100%; min-width: 640px; border-collapse: collapse; font-size: var(--sp-fs-3); }
+.sp-compare th, .sp-compare td { padding: .8rem 1.1rem; border-bottom: 1px solid var(--sp-border); text-align: left; vertical-align: top; }
+.sp-compare-attr {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: var(--sp-white);
+  font-weight: 600;
+  color: var(--sp-navy);
+  white-space: nowrap;
+}
+.sp-compare-best { background-color: rgba(0, 94, 255, .08); }
+.sp-compare-caret { display: inline-block; margin-right: .3rem; color: var(--sp-blue); }
+.sp-compare-empty { color: var(--sp-muted); font-style: italic; }
+.sp-compare-prompt { padding: 3rem 1.5rem; text-align: center; color: var(--sp-muted); }
+
+/* --- Budget impact + conflicts -------------------------------------- */
+.sp-budget-bar { height: 6px; border-radius: 3px; background-color: var(--sp-border); overflow: hidden; }
+.sp-budget-fill { height: 100%; border-radius: 3px; background-color: var(--sp-blue); transition: width 900ms cubic-bezier(.4, 0, .2, 1); }
+.sp-budget-fill.is-over { background-color: var(--sp-warning); }
+.sp-budget-legend { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: .5rem; font-size: 12px; color: var(--sp-muted); font-variant-numeric: tabular-nums; }
+
+.sp-overage {
+  margin-top: .75rem;
+  padding: .7rem .9rem;
+  border: 1px solid var(--sp-warning);
+  border-radius: var(--sp-radius);
+  color: var(--sp-warning);
+  font-size: var(--sp-fs-4);
+}
+
+.sp-conflict {
+  padding: .7rem .9rem;
+  margin-bottom: .5rem;
+  border-left: 2px solid var(--sp-warning);
+  border-radius: 10px;
+  background-color: var(--sp-bg);
+  font-size: var(--sp-fs-4);
+}
+.sp-conflict-clear {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .6rem 0;
+  color: var(--sp-muted);
+  font-size: var(--sp-fs-4);
+}
+
+/* --- Director approvals: program review ------------------------------ */
+.sp-prog-review { padding: 1rem 1.25rem; }
+.sp-prog-meta { margin: 0; }
+.sp-prog-meta > div { display: flex; gap: 1rem; padding: .5rem 0; border-bottom: 1px solid var(--sp-border); }
+.sp-prog-meta > div:last-child { border-bottom: 0; }
+.sp-prog-meta dt { font-size: 12px; color: var(--sp-muted); }
+.sp-prog-meta dd { margin: 0 0 0 auto; font-size: var(--sp-fs-3); font-weight: 500; text-align: right; }
+
+.sp-cap-field { display: flex; align-items: center; gap: .6rem; }
+.sp-cap-field .sp-control { max-width: 110px; }
+
+/* --- Active programs card (agent dashboard) --------------------------- */
+.sp-active-prog {
+  padding: .7rem .9rem;
+  margin-bottom: .5rem;
+  border: 1px solid var(--sp-border);
+  border-radius: 10px;
+  background-color: var(--sp-bg);
+}
+.sp-active-prog:last-child { margin-bottom: 0; }
+.sp-active-prog-name { font-size: var(--sp-fs-4); font-weight: 600; color: var(--sp-navy); }
+.sp-active-prog-rule { margin-top: .15rem; font-size: 12px; color: var(--sp-muted); }
+
+/* --- Shared status pills ------------------------------------------------
+   .sp-status-draft/-submitted/-approved/-rejected/-changes_requested are
+   defined in the work-logging block above (.sp-status, around line 1366).
+   .sp-status-pending is defined in the Programs block above (around line
+   1869), alongside a second .sp-status-draft override. All six already
+   cover Director program + approval statuses one-for-one, so nothing new
+   is added here — reuse the canonical rules rather than redefining them.
+   --------------------------------------------------------------------- */

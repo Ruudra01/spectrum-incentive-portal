@@ -1,0 +1,6 @@
+{% comment %}
+One status pill for the whole product — work logs and programs alike.
+Include with: {% include "dashboard/partials/_status_pill.html" with status=x label=y %}
+`label` is optional; without it the raw status is title-cased.
+{% endcomment %}
+<span class="sp-status sp-status-{{ status }}">{% if status == 'approved' %}&#10003; {% endif %}{% if label %}{{ label }}{% else %}{{ status|cut:"_"|title }}{% endif %}</span>

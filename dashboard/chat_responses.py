@@ -82,10 +82,49 @@ FALLBACK_RESPONSE = (
 )
 
 
-def match_question(text):
+# Role-specific topics layered on top of the shared set. One structure, one
+# code path — match_question just receives a wider list for those roles.
+ROLE_RESPONSES = {
+    "manager": [
+        {
+            "keywords": ["review submission", "how do i review", "approve a log",
+                         "review queue", "approve work"],
+            "question": "How do I review my team's submissions?",
+            "answer": (
+                "Open Approvals from the navbar — the badge shows how many are waiting. "
+                "Submissions are grouped by technician and day, oldest first so nothing "
+                "ages out. Approve, request changes, or reject each entry; the last two "
+                "require a reason, which the technician sees on their own log. You have "
+                "24 hours to reopen a decision if you change your mind."
+            ),
+        },
+    ],
+    "director": [
+        {
+            "keywords": ["program approval", "approve a program", "how does approval",
+                         "review a program", "approve programs"],
+            "question": "How does program approval work?",
+            "answer": (
+                "Managers author programs and submit them to you. The Programs page puts "
+                "up to three side by side so you can compare budget, rules and projected "
+                "volume directly. Approvals shows each proposal against remaining "
+                "quarterly budget and flags any approved program overlapping the same "
+                "dates and job types. Rejecting or requesting changes requires a note."
+            ),
+        },
+    ],
+}
+
+
+def responses_for_role(role=None):
+    """The shared topics plus anything specific to this role."""
+    return FAQ_RESPONSES + ROLE_RESPONSES.get(role or "", [])
+
+
+def match_question(text, role=None):
     """Return the answer whose keywords first appear in the text, else the fallback."""
     haystack = (text or "").lower()
-    for entry in FAQ_RESPONSES:
+    for entry in responses_for_role(role):
         if any(keyword in haystack for keyword in entry["keywords"]):
             return entry["answer"]
     return FALLBACK_RESPONSE
@@ -102,6 +141,17 @@ if __name__ == "__main__":
     assert match_question("hi there") == FALLBACK_RESPONSE
     assert match_question("") == FALLBACK_RESPONSE
     assert match_question(None) == FALLBACK_RESPONSE
+
+    # Role topics extend the shared set without forking the code path.
+    assert len(responses_for_role()) == len(FAQ_RESPONSES)
+    assert len(responses_for_role("manager")) == len(FAQ_RESPONSES) + 1
+    assert len(responses_for_role("director")) == len(FAQ_RESPONSES) + 1
+    manager_q = ROLE_RESPONSES["manager"][0]
+    director_q = ROLE_RESPONSES["director"][0]
+    assert match_question(manager_q["question"], "manager") == manager_q["answer"]
+    assert match_question(director_q["question"], "director") == director_q["answer"]
+    # An agent asking a manager-only question gets the fallback, not the answer.
+    assert match_question("how do i review submissions", "agent") == FALLBACK_RESPONSE
     # No answer may state a threshold the dashboard disagrees with.
     assert str(_GOLD_MIN) in FAQ_RESPONSES[2]["answer"].replace(",", "")
     assert _BRONZE_MAX == _SILVER_MIN - 1

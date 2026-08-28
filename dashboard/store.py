@@ -17,6 +17,7 @@ hold _LOCK for every mutation (the dev server is threaded).
 
 import copy
 import itertools
+import math
 import random
 import threading
 from datetime import date, datetime, timedelta
@@ -492,6 +493,287 @@ def update_program_status(program_id, status, decided_by, decision_note=""):
     return None
 
 
+# --- Director: territory, ROI, program review ------------------------------
+def program_metrics(program):
+    """Modelled metrics for one program dict. Pure computation, no lock — the
+    caller already holds a copy. Every division is guarded so a half-filled
+    draft (zero participants, zero budget, missing dates) never raises.
+    """
+    def _parse(value):
+        try:
+            return date.fromisoformat(value)
+        except (TypeError, ValueError):
+            return None
+
+    start, end = _parse(program.get("start_date")), _parse(program.get("end_date"))
+    duration_weeks = 0
+    if start and end and end > start:
+        duration_weeks = math.ceil((end - start).days / 7)
+
+    bonus_points = sum(r.get("bonus", 0) for r in program.get("bonus_structure", []))
+    participants = program.get("expected_participants") or 0
+    budget = program.get("budget_estimate") or 0
+
+    projected_points = bonus_points * participants
+    projected_value = round(projected_points * mock_data.POINT_VALUE_USD, 2)
+    # Benefit is modelled from the points the program is projected to drive, NOT
+    # from its budget — keying it to budget would make estimated_roi the leverage
+    # constant for every program, and a comparison row that never differs is
+    # useless to a director choosing between proposals.
+    modelled_benefit = round(
+        projected_value * mock_data.ROI_ASSUMPTIONS["program_leverage"]["value"], 2)
+
+    return {
+        "duration_weeks": duration_weeks,
+        "bonus_points": bonus_points,
+        "projected_points": projected_points,
+        "projected_value": projected_value,
+        "cost_per_participant": round(budget / participants, 2) if participants else None,
+        "modelled_benefit": modelled_benefit,
+        "estimated_roi": round(modelled_benefit / budget, 2) if budget else None,
+    }
+
+
+def territory_roi():
+    """The director's ROI attribution: three MODELLED savings lines (see
+    ROI_ASSUMPTIONS/ROI_MODEL) against actual approved program spend.
+    """
+    assumptions, model = mock_data.ROI_ASSUMPTIONS, mock_data.ROI_MODEL
+    truck_roll = assumptions["cost_per_truck_roll"]["value"]
+    replace_cost = assumptions["cost_to_replace_technician"]["value"]
+    hourly_rate = assumptions["loaded_hourly_rate"]["value"]
+
+    repeat_savings = model["repeat_visits_avoided"] * truck_roll
+    retention_savings = model["techs_retained"] * replace_cost
+    fix_savings = model["hours_saved"] * hourly_rate
+    total_savings = repeat_savings + retention_savings + fix_savings
+
+    with _LOCK:
+        program_spend = sum(p["budget_estimate"] for p in STORE["programs"]
+                            if p["status"] == PROGRAM_APPROVED)
+
+    return {
+        "repeat_savings": repeat_savings,
+        "retention_savings": retention_savings,
+        "fix_savings": fix_savings,
+        "total_savings": total_savings,
+        "program_spend": program_spend,
+        "net": total_savings - program_spend,
+        "lines": [
+            {
+                "label": "Repeat visits avoided",
+                "amount": repeat_savings,
+                "detail": (f"{model['repeat_visits_avoided']:,} repeat visits avoided "
+                           f"x ${truck_roll:,.0f} per truck roll"),
+            },
+            {
+                "label": "Technicians retained",
+                "amount": retention_savings,
+                "detail": (f"{model['techs_retained']:,} technicians retained "
+                           f"x ${replace_cost:,.0f} cost to replace"),
+            },
+            {
+                "label": "Faster fixes",
+                "amount": fix_savings,
+                "detail": (f"{model['hours_saved']:,} hours saved "
+                           f"x ${hourly_rate:,.0f} loaded hourly rate"),
+            },
+        ],
+    }
+
+
+def budget_state():
+    """Quarterly budget vs. committed (approved) program spend."""
+    with _LOCK:
+        committed = sum(p["budget_estimate"] for p in STORE["programs"]
+                        if p["status"] == PROGRAM_APPROVED)
+    quarterly_budget = mock_data.TERRITORY["quarterly_budget"]
+    used_percent = min(round(committed / quarterly_budget * 100, 1), 100) if quarterly_budget else 0
+    return {
+        "quarterly_budget": quarterly_budget,
+        "committed": committed,
+        "remaining": quarterly_budget - committed,
+        "used_percent": used_percent,
+    }
+
+
+def program_conflicts(program):
+    """APPROVED programs overlapping both the date range and job types of
+    `program`, excluding itself. Each result carries "overlap_job_types".
+    """
+    job_types = set(program.get("job_types", []))
+    start, end = program.get("start_date"), program.get("end_date")
+    with _LOCK:
+        candidates = copy.deepcopy([
+            p for p in STORE["programs"]
+            if p["status"] == PROGRAM_APPROVED and p["id"] != program.get("id")])
+
+    conflicts = []
+    for other in candidates:
+        if not (start and end and other["start_date"] and other["end_date"]):
+            continue
+        if not (start <= other["end_date"] and other["start_date"] <= end):
+            continue
+        shared = job_types & set(other.get("job_types", []))
+        if shared:
+            other["overlap_job_types"] = sorted(shared)
+            conflicts.append(other)
+    return conflicts
+
+
+def get_pending_programs():
+    """Programs awaiting director review, oldest first."""
+    with _LOCK:
+        programs = [p for p in STORE["programs"] if p["status"] == PROGRAM_PENDING]
+        programs.sort(key=lambda p: (p["created_at"] or "", p["id"]))
+        return copy.deepcopy(programs)
+
+
+def _synthetic_tier_counts(team_size, total_points):
+    """A plausible tier split for a manager whose technicians we don't
+    simulate individually. Centered on the tier the team's average points
+    would fall into, with a spread on either side. Always sums to team_size.
+    """
+    tiers = [t["slug"] for t in mock_data.TIERS]
+    average = total_points // max(team_size, 1)
+    center = tiers.index(mock_data.get_tier(average)["slug"])
+
+    lower = round(team_size * 0.2)
+    upper = round(team_size * 0.2)
+    mid = team_size - lower - upper
+    if center == 0:
+        mid, lower = mid + lower, 0
+    if center == len(tiers) - 1:
+        mid, upper = mid + upper, 0
+
+    counts = {slug: 0 for slug in tiers}
+    counts[tiers[center]] += mid
+    if lower:
+        counts[tiers[center - 1]] += lower
+    if upper:
+        counts[tiers[center + 1]] += upper
+    return counts
+
+
+def manager_comparison():
+    """One row per manager in ORG, for the director's team comparison view.
+
+    Marcus Vale (884) is computed live from his real 18 technicians;
+    the other five come from MANAGER_TEAM_STATS with a synthesised tier
+    split, since we don't simulate their technicians individually.
+    """
+    with _LOCK:
+        programs = copy.deepcopy(STORE["programs"])
+
+    rows = []
+    for manager in mock_data.ORG["managers"]:
+        manager_id = manager["id"]
+        authored = sum(1 for p in programs if p["created_by"] == manager_id)
+
+        if manager_id == 884:
+            reports = mock_data.reports_for_manager(884)
+            count = len(reports)
+            points = sum(a["points"] for a in reports)
+            repeat_rate = round(sum(a["repeat_rate"] for a in reports) / count, 1)
+            on_time_rate = round(sum(a["on_time_rate"] for a in reports) / count, 1)
+            csat = round(sum(a["csat"] for a in reports) / count, 2)
+            overtime_hours = round(sum(a["overtime_hours_this_week"] for a in reports), 1)
+            tier_counts = {}
+            for agent in reports:
+                slug = mock_data.get_tier(agent["points"])["slug"]
+                tier_counts[slug] = tier_counts.get(slug, 0) + 1
+        else:
+            stats = mock_data.MANAGER_TEAM_STATS[manager_id]
+            points = stats["points"]
+            repeat_rate = stats["repeat_rate"]
+            on_time_rate = stats["on_time_rate"]
+            csat = stats["csat"]
+            overtime_hours = stats["overtime_hours"]
+            tier_counts = _synthetic_tier_counts(manager["team_size"], points)
+
+        rows.append({
+            "id": manager_id, "name": manager["name"], "team": manager["team"],
+            "team_size": manager["team_size"], "points": points,
+            "repeat_rate": repeat_rate, "on_time_rate": on_time_rate,
+            "csat": csat, "overtime_hours": overtime_hours,
+            "programs_authored": authored, "tier_counts": tier_counts,
+        })
+    return rows
+
+
+def review_program(program_id, status, reviewer_name, note="", budget_cap=None):
+    """The director's approve/reject/request-changes decision on a program.
+
+    Mirrors review_entry's rule: a REJECTED or CHANGES decision with no note
+    is refused here, not just in the browser — an unexplained decision must
+    be impossible at the store layer.
+    """
+    if status not in (PROGRAM_APPROVED, PROGRAM_REJECTED, PROGRAM_CHANGES):
+        raise ValueError(f"unknown program review status: {status}")
+    note = (note or "").strip()
+    if status in (PROGRAM_REJECTED, PROGRAM_CHANGES) and not note:
+        return None
+    with _LOCK:
+        for program in STORE["programs"]:
+            if program["id"] != program_id:
+                continue
+            if program["status"] != PROGRAM_PENDING:
+                return None
+            program["status"] = status
+            program["director_note"] = note
+            program["reviewed_by"] = reviewer_name
+            program["reviewed_at"] = _stamp()
+            if status == PROGRAM_APPROVED and isinstance(budget_cap, int) and budget_cap > 0:
+                program["budget_estimate"] = budget_cap
+            return copy.deepcopy(program)
+    return None
+
+
+def reopen_program(program_id, reviewer_name, note):
+    """Send a decided program back to changes_requested, within 24 hours of
+    the original decision. Mirrors reopen_entry."""
+    note = (note or "").strip()
+    if not note:
+        return None
+    with _LOCK:
+        for program in STORE["programs"]:
+            if program["id"] != program_id or program["reviewed_by"] != reviewer_name:
+                continue
+            try:
+                decided = datetime.strptime(program["reviewed_at"], "%Y-%m-%d %H:%M")
+            except (TypeError, ValueError):
+                return None
+            if datetime.now() - decided > timedelta(hours=REOPEN_WINDOW_HOURS):
+                return None
+            program["status"] = PROGRAM_CHANGES
+            program["director_note"] = note
+            program["reviewed_at"] = _stamp()
+            return copy.deepcopy(program)
+    return None
+
+
+def active_programs_for_agent(agent):
+    """APPROVED programs targeting this agent's team that are active today,
+    each with plain-language "rule_texts" for the agent-facing incentives view.
+    """
+    today = date.today().isoformat()
+    with _LOCK:
+        programs = copy.deepcopy([
+            p for p in STORE["programs"]
+            if p["status"] == PROGRAM_APPROVED and p["target_team"] == agent["team"]
+            and p["start_date"] <= today <= p["end_date"]])
+
+    for program in programs:
+        rule_texts = []
+        for rule in program["bonus_structure"]:
+            job = mock_data.JOB_TYPES_BY_CODE.get(rule.get("job_type"))
+            label = job["label"].lower() if job else rule.get("job_type", "job")
+            rule_texts.append(
+                f"Complete {rule.get('count')} {label} for a {rule.get('bonus')} point bonus")
+        program["rule_texts"] = rule_texts
+    return programs
+
+
 # --- Manager: burnout, team stats, review batches ---------------------------
 def _consecutive_days_logged(entries, today):
     """Longest run of consecutive days with at least one entry, ending today
@@ -827,6 +1109,88 @@ if __name__ == "__main__":
 
     add_notification(417, "hello")
     assert len(get_notifications(417, unread_only=True)) == 1
+
+    # --- Director workspace ---
+    # program_metrics never raises on a half-filled draft.
+    draft = create_program(884, "Marcus Vale", name="Empty Draft")
+    metrics = program_metrics(draft)
+    assert metrics["cost_per_participant"] is None
+    assert metrics["estimated_roi"] is None
+    assert metrics["duration_weeks"] == 0
+
+    metrics1 = program_metrics(get_program(1))
+    assert metrics1["bonus_points"] == 250
+    assert metrics1["projected_points"] == 250 * 18
+    assert metrics1["projected_value"] == round(250 * 18 * mock_data.POINT_VALUE_USD, 2)
+    assert metrics1["cost_per_participant"] == round(45000 / 18, 2)
+    assert metrics1["duration_weeks"] == math.ceil(
+        (date(2026, 12, 31) - date(2026, 10, 1)).days / 7)
+
+    # territory_roi: three lines, internally consistent totals.
+    roi = territory_roi()
+    assert len(roi["lines"]) == 3
+    assert roi["total_savings"] == roi["repeat_savings"] + roi["retention_savings"] + roi["fix_savings"]
+    assert roi["net"] == roi["total_savings"] - roi["program_spend"]
+
+    # budget_state: committed + remaining always reconciles to the budget.
+    budget = budget_state()
+    assert budget["committed"] + budget["remaining"] == budget["quarterly_budget"]
+    assert 0 <= budget["used_percent"] <= 100
+
+    # program_conflicts: a genuine overlap is found; disjoint job types are not.
+    assert program_conflicts(get_program(1)) == [], "nothing approved overlaps program 1 yet"
+    overlap = create_program(884, "Marcus Vale", name="Overlap Test",
+                             start_date="2026-11-01", end_date="2026-11-30",
+                             job_types=["new_install_residential"],
+                             status=PROGRAM_APPROVED, budget_estimate=5000,
+                             expected_participants=10)
+    disjoint = create_program(884, "Marcus Vale", name="Disjoint Test",
+                              start_date="2026-11-01", end_date="2026-11-30",
+                              job_types=["service_repair"],
+                              status=PROGRAM_APPROVED, budget_estimate=3000,
+                              expected_participants=5)
+    conflicts = program_conflicts(get_program(1))
+    assert [c["id"] for c in conflicts] == [overlap["id"]], "only the shared-job-type overlap counts"
+    assert conflicts[0]["overlap_job_types"] == ["new_install_residential"]
+
+    # get_pending_programs: oldest first, all pending.
+    pending = get_pending_programs()
+    assert all(p["status"] == PROGRAM_PENDING for p in pending)
+    assert pending == sorted(pending, key=lambda p: (p["created_at"] or "", p["id"]))
+
+    # manager_comparison: six rows, Marcus computed live, tier counts sum to team size.
+    rows = manager_comparison()
+    assert len(rows) == 6
+    assert {r["id"] for r in rows} == {m["id"] for m in mock_data.ORG["managers"]}
+    for row in rows:
+        assert sum(row["tier_counts"].values()) == row["team_size"], row["id"]
+    marcus_row = next(r for r in rows if r["id"] == 884)
+    assert marcus_row["points"] == sum(a["points"] for a in mock_data.reports_for_manager(884))
+
+    # review_program: an unexplained REJECTED/CHANGES decision is refused, and
+    # leaves the program's status untouched.
+    assert review_program(2, PROGRAM_REJECTED, "Priya Raghunathan", note="") is None
+    assert get_program(2)["status"] == PROGRAM_PENDING
+    assert review_program(2, PROGRAM_CHANGES, "Priya Raghunathan", note="   ") is None
+    assert get_program(2)["status"] == PROGRAM_PENDING
+    approved = review_program(1, PROGRAM_APPROVED, "Priya Raghunathan",
+                              note="Approved at reduced budget.", budget_cap=40000)
+    assert approved["status"] == PROGRAM_APPROVED
+    assert approved["budget_estimate"] == 40000
+    assert approved["reviewed_by"] == "Priya Raghunathan"
+
+    # reopen_program: wrong reviewer or stale decision refused; matching, fresh one works.
+    assert reopen_program(1, "Someone Else", "note") is None, "reviewer must match"
+    assert reopen_program(3, "Priya Raghunathan", "too late") is None, "reviewed too long ago"
+    reopened = reopen_program(1, "Priya Raghunathan", "Need updated job type mix.")
+    assert reopened["status"] == PROGRAM_CHANGES
+    assert reopened["director_note"] == "Need updated job type mix."
+
+    # active_programs_for_agent: right shape, rule sentences attached.
+    active = active_programs_for_agent(mock_data.AGENT_PROFILE)
+    assert any(p["id"] == 3 for p in active), "Summer Install Sprint covers today for Dana's team"
+    program3 = next(p for p in active if p["id"] == 3)
+    assert program3["rule_texts"] and isinstance(program3["rule_texts"][0], str)
 
     reset_store()
     assert len([e for e in get_entries_for_agent(417)

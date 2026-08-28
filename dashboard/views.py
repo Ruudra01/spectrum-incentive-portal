@@ -107,6 +107,7 @@ def agent_dashboard(request):
             "insights": insights.generate_insights(agent["id"]),
             "point_value": mock_data.POINT_VALUE_USD,
             "next_payout": mock_data.NEXT_PAYOUT_DATE,
+            "active_programs": store.active_programs_for_agent(agent),
             # Simulator mirrors the same job/tier numbers the server uses.
             "sim_data": json.dumps({
                 "points": agent["points"],
@@ -138,13 +139,17 @@ def chat_api(request):
     if not message:
         return JsonResponse({"error": "A message is required."}, status=400)
 
-    return JsonResponse({"reply": chat_responses.match_question(message)})
+    return JsonResponse({
+        "reply": chat_responses.match_question(message, request.session.get("role")),
+    })
 
 
 def faqs(request):
-    """FAQ page. Content is the same FAQ_RESPONSES the chatbot answers from,
-    so the page and the assistant can never disagree."""
-    return render(request, "dashboard/faqs.html", {"faq": chat_responses.FAQ_RESPONSES})
+    """FAQ page. Content is the same set the chatbot answers from, scoped to
+    the signed-in role, so the page and the assistant can never disagree."""
+    return render(request, "dashboard/faqs.html", {
+        "faq": chat_responses.responses_for_role(request.session.get("role")),
+    })
 
 
 def _int(value, default=0):
@@ -694,20 +699,295 @@ def manager_programs(request):
 
 @role_required(mock_data.ROLE_DIRECTOR)
 def director_overview(request):
-    return _placeholder(request, "Overview",
-                        "Territory rollups across every manager, team and warehouse.")
+    """Territory rollup: KPI tiles, ROI attribution and the manager comparison
+    table. Every number traces back to TERRITORY / store.territory_roi so the
+    page and the underlying assumptions can never disagree."""
+    territory = mock_data.TERRITORY
+    today = date.today().isoformat()
+
+    def _kpi(label, value, prev, unit, url=""):
+        # direction always follows the raw sign, even for repeat rate where a
+        # fall is the good outcome — the glyph is the template's job, not ours.
+        diff = value - prev
+        delta = round(abs(diff) / prev * 100, 1) if prev else 0.0
+        return {"label": label, "value": value, "unit": unit, "delta": delta,
+                "direction": "up" if diff >= 0 else "down", "url": url}
+
+    active_programs = sum(
+        1 for p in store.get_programs(status=store.PROGRAM_APPROVED)
+        if p["start_date"] <= today <= p["end_date"])
+    awaiting = store.count_pending_programs()
+
+    kpis = [
+        _kpi("Region NPS", territory["nps"], territory["nps_prev"], ""),
+        _kpi("Technician retention", territory["retention_rate"], territory["retention_prev"], "%"),
+        _kpi("Operational efficiency", territory["efficiency"], territory["efficiency_prev"], "%"),
+        _kpi("Avg repeat rate", territory["repeat_rate"], territory["repeat_prev"], "%"),
+        # No prior-period figure exists for these two, so delta is 0 (falsy,
+        # so a template hides the badge rather than showing a fake change).
+        {"label": "Active programs", "value": active_programs, "unit": "",
+         "delta": 0.0, "direction": "up", "url": ""},
+        {"label": "Programs awaiting approval", "value": awaiting, "unit": "",
+         "delta": 0.0, "direction": "up", "url": reverse("dashboard:director_approvals")},
+    ]
+
+    managers = store.manager_comparison()
+    repeat_avg = sum(m["repeat_rate"] for m in managers) / len(managers)
+    on_time_avg = sum(m["on_time_rate"] for m in managers) / len(managers)
+    # Data-bar widths scaled against the territory average, same convention
+    # manager_team uses for its roster bars.
+    managers = [
+        dict(m,
+             repeat_pct=min(round(m["repeat_rate"] / max(repeat_avg, 0.1) * 50), 100),
+             on_time_pct=min(round(m["on_time_rate"] / max(on_time_avg, 0.1) * 50), 100))
+        for m in managers
+    ]
+
+    return render(request, "dashboard/director_overview.html", {
+        "territory": territory,
+        "kpis": kpis,
+        "roi": store.territory_roi(),
+        "assumptions": [
+            {"key": key, "label": a["label"], "value": a["value"], "source": a["source"]}
+            for key, a in mock_data.ROI_ASSUMPTIONS.items()
+        ],
+        "managers": managers,
+        "terr_avg": {"repeat_rate": round(repeat_avg, 1), "on_time_rate": round(on_time_avg, 1)},
+        "trend_json": json.dumps({
+            "points": mock_data.TERRITORY_WEEKLY["points"],
+            "repeat": mock_data.TERRITORY_WEEKLY["repeat_rate"],
+        }),
+    })
+
+
+# Ordering and favourability for the director's program comparison grid live
+# here, once, rather than being buried in a loop. Each "get" returns
+# (display_or_None, raw_or_None); None display means "not specified".
+def _job_labels(codes):
+    return ", ".join(mock_data.JOB_TYPES_BY_CODE[c]["label"] for c in codes or []
+                      if c in mock_data.JOB_TYPES_BY_CODE)
+
+
+def _bonus_sentences(rules):
+    sentences = []
+    for rule in rules or []:
+        job = mock_data.JOB_TYPES_BY_CODE.get(rule.get("job_type"))
+        label = job["label"] if job else rule.get("job_type", "job")
+        sentences.append(f"{rule.get('count')} x {label} -> {rule.get('bonus')} pts")
+    return "; ".join(sentences)
+
+
+_SCOPE_LABELS = {s["code"]: s["label"] for s in mock_data.PROGRAM_SCOPES}
+
+
+_COMPARISON_ATTRS = [
+    {"label": "Author and team", "kind": "text", "better": "none",
+     "get": lambda p: (f"{p['owner_name']} — {p['target_team']}", None)},
+    {"label": "Date range", "kind": "text", "better": "none",
+     "get": lambda p: (f"{p['start_date']} – {p['end_date']}", None)
+     if p["start_date"] and p["end_date"] else (None, None)},
+    {"label": "Duration", "kind": "number", "better": "none",
+     "get": lambda p: (f"{p['metrics']['duration_weeks']} weeks", p["metrics"]["duration_weeks"])
+     if p["metrics"]["duration_weeks"] else (None, None)},
+    {"label": "Scope", "kind": "text", "better": "none",
+     "get": lambda p: (_SCOPE_LABELS.get(p["target_scope"], p["target_scope"]), None)},
+    {"label": "Qualifying job types", "kind": "list", "better": "none",
+     "get": lambda p: (_job_labels(p["job_types"]), None) if p["job_types"] else (None, None)},
+    {"label": "Bonus rules", "kind": "list", "better": "none",
+     "get": lambda p: (_bonus_sentences(p["bonus_structure"]), None)
+     if p["bonus_structure"] else (None, None)},
+    {"label": "Expected participants", "kind": "number", "better": "high",
+     "get": lambda p: (f"{p['expected_participants']:,}", p["expected_participants"])
+     if p["expected_participants"] else (None, None)},
+    {"label": "Estimated budget", "kind": "money", "better": "low",
+     "get": lambda p: (f"${p['budget_estimate']:,.0f}", p["budget_estimate"])
+     if p["budget_estimate"] else (None, None)},
+    {"label": "Cost per participant", "kind": "money", "better": "low",
+     "get": lambda p: (f"${p['metrics']['cost_per_participant']:,.2f}",
+                        p["metrics"]["cost_per_participant"])
+     if p["metrics"]["cost_per_participant"] else (None, None)},
+    {"label": "Success metric and target", "kind": "text", "better": "none",
+     "get": lambda p: (
+         f"{mock_data.SUCCESS_METRICS_BY_CODE[p['success_metric']]['label']} -> "
+         f"{p['success_target']}{mock_data.SUCCESS_METRICS_BY_CODE[p['success_metric']]['unit']}",
+         None) if p["success_metric"] in mock_data.SUCCESS_METRICS_BY_CODE else (None, None)},
+    {"label": "Projected point volume", "kind": "number", "better": "high",
+     "get": lambda p: (f"{p['metrics']['projected_points']:,} pts", p["metrics"]["projected_points"])
+     if p["metrics"]["projected_points"] else (None, None)},
+    {"label": "Estimated ROI", "kind": "number", "better": "high",
+     "get": lambda p: (f"{p['metrics']['estimated_roi']:.2f}x", p["metrics"]["estimated_roi"])
+     if p["metrics"]["estimated_roi"] is not None else (None, None)},
+]
+
+
+def _comparison_rows(programs):
+    """The server-side comparison grid for up to three selected programs."""
+    rows = []
+    for attr in _COMPARISON_ATTRS:
+        cells = []
+        raws = []
+        for program in programs:
+            display, raw = attr["get"](program)
+            missing = display is None
+            cells.append({"display": display or "Not specified", "raw": raw,
+                          "is_best": False, "missing": missing})
+            if not missing and raw is not None:
+                raws.append(raw)
+
+        if attr["better"] != "none" and len(programs) >= 2 and len(set(raws)) > 1:
+            best = min(raws) if attr["better"] == "low" else max(raws)
+            for cell in cells:
+                if not cell["missing"] and cell["raw"] == best:
+                    cell["is_best"] = True
+
+        rows.append({
+            "label": attr["label"], "kind": attr["kind"], "better": attr["better"],
+            "same": len({c["display"] for c in cells}) <= 1,
+            "cells": cells,
+        })
+    return rows
 
 
 @role_required(mock_data.ROLE_DIRECTOR)
 def director_programs(request):
-    return _placeholder(request, "Programs",
-                        "Every incentive program in the territory, with spend against budget.")
+    """Every program in the territory, with up to three selected side by side
+    for the comparison grid. GET only — this page is a lens, not a form."""
+    today = date.today().isoformat()
+
+    raw_ids = [_int(v) for v in request.GET.getlist("p")]
+    limit_hit = len(raw_ids) > 3
+    selected_ids = raw_ids[:3]
+
+    programs = store.get_programs()
+    for program in programs:
+        program["metrics"] = store.program_metrics(program)
+        program["status_label"] = program["status"].replace("_", " ").title()
+        if program["status"] == store.PROGRAM_APPROVED:
+            if program["start_date"] > today:
+                program["phase"] = "Scheduled"
+            elif program["end_date"] < today:
+                program["phase"] = "Ended"
+            else:
+                program["phase"] = "Active"
+        else:
+            program["phase"] = ""
+        program["selected"] = program["id"] in selected_ids
+        program["position"] = (selected_ids.index(program["id"]) + 1
+                               if program["id"] in selected_ids else None)
+
+    by_id = {p["id"]: p for p in programs}
+    selected = [by_id[i] for i in selected_ids if i in by_id]
+
+    pending = sorted(
+        (p for p in programs if p["status"] == store.PROGRAM_PENDING and not p["selected"]),
+        key=lambda p: p["created_at"] or "", reverse=True)
+
+    return render(request, "dashboard/director_programs.html", {
+        "programs": programs,
+        "selected": selected,
+        "limit_hit": limit_hit,
+        "status_filter": request.GET.get("status", "all"),
+        "suggested": pending[:2],
+        "rows": _comparison_rows(selected),
+    })
+
+
+def _director_status_label(status):
+    return status.replace("_", " ").title()
 
 
 @role_required(mock_data.ROLE_DIRECTOR)
 def director_approvals(request):
-    return _placeholder(request, "Approvals",
-                        "Programs awaiting your approval.")
+    """Two-pane program review queue. Rejections and change requests need a
+    note — enforced in store.review_program, mirroring the manager queue."""
+    director_name = mock_data.DIRECTOR_PROFILE["name"]
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        program_id = _int(request.POST.get("program_id"))
+        note = request.POST.get("note", "")
+
+        if action == "reopen":
+            store.reopen_program(program_id, director_name, note)
+            return redirect(f"{reverse('dashboard:director_approvals')}?reopened=1")
+
+        status = request.POST.get("status")
+        budget_cap = _int(request.POST.get("budget_cap")) or None
+        result = store.review_program(program_id, status, director_name, note, budget_cap)
+        if result is None:
+            return redirect(f"{reverse('dashboard:director_approvals')}?refused=1")
+        return redirect(f"{reverse('dashboard:director_approvals')}?done={result['owner_name']}")
+
+    queue = store.get_pending_programs()
+    for program in queue:
+        program["metrics"] = store.program_metrics(program)
+        program["author"] = program["owner_name"]
+        hours = _hours_since(program["created_at"])
+        program["age_label"] = _age_label(hours)
+        # 5 days here, not the 48 hours the manager queue uses — a program
+        # decision carries more weight than a single day's work log.
+        program["stale"] = hours is not None and hours > 5 * 24
+
+    sort = request.GET.get("sort", "oldest")
+    keys = {
+        "oldest": lambda p: (p["created_at"] or "", p["owner_name"]),
+        "newest": lambda p: (p["created_at"] or "", p["owner_name"]),
+        "budget": lambda p: -p["budget_estimate"],
+        "author": lambda p: p["owner_name"],
+    }
+    queue.sort(key=keys.get(sort, keys["oldest"]), reverse=(sort == "newest"))
+
+    selected_id = _int(request.GET.get("g")) or None
+    selected = next((p for p in queue if p["id"] == selected_id), None) \
+        or (queue[0] if queue else None)
+
+    context = {
+        "queue": queue,
+        "sort": sort,
+        "selected": selected,
+        "queue_count": len(queue),
+        "done": request.GET.get("done", ""),
+        "refused": request.GET.get("refused") == "1",
+        "reopened": request.GET.get("reopened") == "1",
+    }
+
+    if selected is not None:
+        budget = store.budget_state()
+        overage = selected["budget_estimate"] - budget["remaining"]
+        context.update({
+            "conflicts": store.program_conflicts(selected),
+            "budget": budget,
+            "would_exceed": overage > 0,
+            "overage": max(overage, 0),
+            "sel_metrics": store.program_metrics(selected),
+        # Codes like new_install_residential are unreadable in a review pane;
+        # a director should see the same words the job list uses.
+        "sel_job_labels": [
+            mock_data.JOB_TYPES_BY_CODE[j]["label"]
+            for j in (selected.get("job_types") or []) if j in mock_data.JOB_TYPES_BY_CODE
+        ] if selected else [],
+        "sel_rule_texts": [
+            "{} x {} for a {} point bonus".format(
+                r.get("count", 0),
+                mock_data.JOB_TYPES_BY_CODE.get(r.get("job_type"), {}).get("label", r.get("job_type")),
+                r.get("bonus", 0))
+            for r in (selected.get("bonus_structure") or [])
+        ] if selected else [],
+        "sel_metric_label": mock_data.SUCCESS_METRICS_BY_CODE.get(
+            (selected or {}).get("success_metric"), {}).get("label", ""),
+        })
+
+    history = [p for p in store.get_programs() if p["reviewed_by"] == director_name]
+    history.sort(key=lambda p: p["reviewed_at"] or "", reverse=True)
+    for program in history:
+        program["status_label"] = _director_status_label(program["status"])
+        program["reopenable"] = (_hours_since(program["reviewed_at"]) or 999) <= store.REOPEN_WINDOW_HOURS
+
+    today = date.today().isoformat()
+    context["history"] = history[:20]
+    context["reviewed_today"] = sum(1 for p in history if (p["reviewed_at"] or "").startswith(today))
+
+    return render(request, "dashboard/director_approvals.html", context)
 
 
 @require_POST

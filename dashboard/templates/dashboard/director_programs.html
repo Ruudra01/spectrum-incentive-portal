@@ -1,0 +1,172 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Programs — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    <header class="sp-page-header">
+      <div>
+        <h1>Programs</h1>
+        <p class="sp-muted sp-small mb-0 mt-1">
+          Pick up to three competing proposals and compare them side by side before you approve one.
+        </p>
+      </div>
+    </header>
+
+    {# ---------------- SELECTION STRIP ---------------- #}
+    <div class="sp-card mt-3 p-3">
+      <div class="sp-chips mb-2" id="spSelectChips" role="group" aria-label="Filter by status">
+        <button type="button" class="sp-chip" data-value="all" aria-pressed="true">All</button>
+        <button type="button" class="sp-chip" data-value="pending" aria-pressed="false">Awaiting approval</button>
+        <button type="button" class="sp-chip" data-value="active" aria-pressed="false">Active</button>
+        <button type="button" class="sp-chip" data-value="draft" aria-pressed="false">Draft</button>
+        <button type="button" class="sp-chip" data-value="ended" aria-pressed="false">Ended</button>
+      </div>
+
+      <div class="sp-select-strip" id="spSelectStrip">
+        {% for program in programs %}
+        {% if program.selected %}
+        {# Toggling off: rebuild the query string from the other selected programs. #}
+        <a class="sp-select-card is-selected" data-status="{{ program.status }}" data-phase="{{ program.phase }}"
+           href="?{% for sel in selected %}{% if sel.id != program.id %}p={{ sel.id }}&{% endif %}{% endfor %}"
+           aria-label="Remove {{ program.name }} from comparison">
+          <span class="sp-select-badge">{{ program.position }}</span>
+          <p class="sp-select-name mb-0">{{ program.name }}</p>
+          <p class="sp-select-meta mb-1">{{ program.owner_name }} &middot; {{ program.target_team }} &middot; ${{ program.budget_estimate }}</p>
+          {% include "dashboard/partials/_status_pill.html" with status=program.status label=program.status_label %}
+        </a>
+        {% else %}
+        {# Selecting: keep the current selection and add this one. #}
+        <a class="sp-select-card" data-status="{{ program.status }}" data-phase="{{ program.phase }}"
+           href="?{% for sel in selected %}p={{ sel.id }}&{% endfor %}p={{ program.id }}"
+           aria-label="Add {{ program.name }} to comparison">
+          <p class="sp-select-name mb-0">{{ program.name }}</p>
+          <p class="sp-select-meta mb-1">{{ program.owner_name }} &middot; {{ program.target_team }} &middot; ${{ program.budget_estimate }}</p>
+          {% include "dashboard/partials/_status_pill.html" with status=program.status label=program.status_label %}
+        </a>
+        {% endif %}
+        {% empty %}
+        <p class="sp-muted sp-small mb-0">No programs to compare yet.</p>
+        {% endfor %}
+      </div>
+
+      <p class="sp-limit-note {% if limit_hit %}is-hit{% endif %}" id="spLimitNote">
+        {% if limit_hit %}
+        Three is the maximum you can compare at once. Deselect one before adding another.
+        {% else %}
+        Compare up to three programs at a time.
+        {% endif %}
+      </p>
+    </div>
+
+    {% if selected %}
+    {# ---------------- COMPARISON GRID ---------------- #}
+    <div class="sp-card mt-3 p-3">
+      <div class="sp-toolbar">
+        <label class="d-flex align-items-center gap-2 mb-0">
+          <input type="checkbox" id="spOnlyDiff">
+          <span class="sp-small">Show only differences</span>
+        </label>
+      </div>
+
+      <div class="sp-compare-wrap mt-2">
+        <table class="sp-compare" id="spCompareTable">
+          <thead>
+            <tr>
+              <th class="sp-compare-attr" scope="col"></th>
+              {% for program in selected %}
+              <th scope="col">
+                <p class="mb-1">{{ program.name }}</p>
+                <p class="sp-muted sp-small mb-1">{{ program.owner_name }}</p>
+                {% include "dashboard/partials/_status_pill.html" with status=program.status label=program.status_label %}
+              </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr data-same="{% if row.same %}1{% else %}0{% endif %}">
+              <th scope="row" class="sp-compare-attr">{{ row.label }}</th>
+              {% for cell in row.cells %}
+              {% if cell.is_best %}
+              <td class="sp-compare-best">
+                <span class="sp-compare-caret" aria-label="Most favourable value">{% if row.better == "low" %}&#9662;{% else %}&#9652;{% endif %}</span>{{ cell.display }}
+              </td>
+              {% elif cell.missing %}
+              <td class="sp-compare-empty">Not specified</td>
+              {% else %}
+              <td>{{ cell.display }}</td>
+              {% endif %}
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# ---------------- PER-PROGRAM ACTIONS ---------------- #}
+    {% for program in selected %}
+    {% if program.status == "pending" %}
+    <div class="mt-3">
+      <a class="btn-sp-primary" href="{% url 'dashboard:director_approvals' %}?g={{ program.id }}">Review {{ program.name }}</a>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    {% else %}
+    {# ---------------- EMPTY STATE ---------------- #}
+    <div class="sp-card sp-empty-card sp-compare-prompt mt-3">
+      <h2 class="mb-2">Pick up to three programs to compare</h2>
+      <p class="sp-muted mb-3">Select cards above to line up their budgets, targets and rules side by side.</p>
+      {% if suggested %}
+      <div class="d-flex flex-wrap justify-content-center gap-2">
+        {% for program in suggested %}
+        <a class="btn-sp-secondary" href="?p={{ program.id }}">Compare {{ program.name }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    /* --- status filter chips over the selection strip --- */
+    var chips = document.getElementById("spSelectChips");
+    if (chips) {
+      var cards = Array.prototype.slice.call(document.querySelectorAll("#spSelectStrip .sp-select-card"));
+      chips.addEventListener("click", function (e) {
+        var chip = e.target.closest(".sp-chip");
+        if (!chip) return;
+        chips.querySelectorAll(".sp-chip").forEach(function (c) {
+          c.setAttribute("aria-pressed", String(c === chip));
+        });
+        var want = chip.dataset.value;
+        cards.forEach(function (card) {
+          var ok = want === "all" || card.dataset.status === want || card.dataset.phase.toLowerCase() === want;
+          card.hidden = !ok;
+        });
+      });
+    }
+
+    /* --- show only differences --- */
+    var onlyDiff = document.getElementById("spOnlyDiff");
+    var table = document.getElementById("spCompareTable");
+    if (onlyDiff && table) {
+      var rows = Array.prototype.slice.call(table.querySelectorAll("tbody tr[data-same]"));
+      onlyDiff.addEventListener("change", function () {
+        rows.forEach(function (row) {
+          row.hidden = onlyDiff.checked && row.dataset.same === "1";
+        });
+      });
+    }
+  })();
+</script>
+{% endblock %}

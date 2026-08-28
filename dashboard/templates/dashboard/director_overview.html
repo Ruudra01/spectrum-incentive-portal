@@ -1,0 +1,355 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Overview — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    {# ---- Page header ---- #}
+    <header class="sp-page-header">
+      <div>
+        <h1>Good to see you, {{ current_user.first_name }}.</h1>
+        <p class="sp-muted sp-small mb-0 mt-1">
+          {{ territory.name }} &middot; {{ territory.managers }} managers &middot; {{ territory.technicians }} technicians
+        </p>
+      </div>
+      <p class="sp-muted sp-small mb-0 ms-auto text-lg-end">{{ territory.quarter }}</p>
+    </header>
+
+    {# ---- KPI row ---- #}
+    <div class="row g-3 mt-1">
+      {% for kpi in kpis %}
+      <div class="col-6 col-lg-2">
+        {% if kpi.url %}
+        <a class="sp-card sp-kpi sp-kpi-link" href="{{ kpi.url }}">
+          <p class="sp-kpi-label">{{ kpi.label }}</p>
+          <p class="sp-kpi-value mb-2"><span data-count="{{ kpi.value }}">0</span>{% if kpi.unit %}<span class="sp-kpi-unit">{{ kpi.unit }}</span>{% endif %}</p>
+          <p class="sp-delta sp-delta-{{ kpi.direction }} mb-0">{{ kpi.delta }}%</p>
+        </a>
+        {% else %}
+        <div class="sp-card sp-kpi">
+          <p class="sp-kpi-label">{{ kpi.label }}</p>
+          <p class="sp-kpi-value mb-2"><span data-count="{{ kpi.value }}">0</span>{% if kpi.unit %}<span class="sp-kpi-unit">{{ kpi.unit }}</span>{% endif %}</p>
+          <p class="sp-delta sp-delta-{{ kpi.direction }} mb-0">{{ kpi.delta }}%</p>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="row g-3 mt-1">
+      {# ---- ROI tracker ---- #}
+      <div class="col-lg-5">
+        <div class="sp-card sp-roi p-4 h-100">
+          <p class="sp-eyebrow mb-1">Program ROI this quarter</p>
+          <p class="sp-roi-headline mb-3">$<span id="spRoiHeadline" data-count="{{ roi.total_savings }}">0</span></p>
+
+          <div class="sp-roi-lines">
+            {% for line in roi.lines %}
+            <div class="sp-roi-line">
+              <div>
+                <p class="sp-roi-label mb-0">{{ line.label }}</p>
+                <p class="sp-roi-detail sp-muted sp-small mb-0">{{ line.detail }}</p>
+              </div>
+              <p class="sp-roi-amount mb-0">${{ line.amount|floatformat:0 }}</p>
+            </div>
+            {% endfor %}
+          </div>
+
+          <div class="sp-roi-totals">
+            <div class="sp-roi-line">
+              <p class="sp-roi-label mb-0">Program spend</p>
+              <p class="sp-roi-amount mb-0">${{ roi.program_spend|floatformat:0 }}</p>
+            </div>
+            <div class="sp-roi-line sp-roi-net">
+              <p class="sp-roi-label mb-0">Net impact</p>
+              <p class="sp-roi-amount mb-0">${{ roi.net|floatformat:0 }}</p>
+            </div>
+          </div>
+
+          <p class="sp-modelled sp-small mt-3 mb-1">
+            <strong>Modelled estimate, not a measured result.</strong> These figures are projected from the demo assumptions below, not audited financials.
+          </p>
+          <button type="button" class="sp-disclose" id="spRoiDiscloseBtn" aria-expanded="false" aria-controls="spRoiDiscloseBody">Show assumptions</button>
+          <div class="sp-disclose-body" id="spRoiDiscloseBody">
+            <div class="sp-disclose-inner">
+              <ul class="sp-summary mb-0">
+                {% for a in assumptions %}
+                <li><strong>{{ a.label }}:</strong> {{ a.value }} <span class="sp-muted sp-small">&mdash; {{ a.source }}</span></li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ---- Territory trend ---- #}
+      <div class="col-lg-7">
+        <div class="sp-card p-4 h-100" id="spTerrTrend" data-trend="{{ trend_json }}">
+          <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-1">
+            <div>
+              <h2 class="mb-1">Territory trend, last 12 weeks</h2>
+              <p class="sp-muted sp-small mb-0">Hover or focus a week for its values.</p>
+            </div>
+            <div class="sp-legend-row">
+              <span class="sp-legend-key"><span class="sp-legend-key-solid" aria-hidden="true"></span>Territory points</span>
+              <span class="sp-legend-key"><span class="sp-legend-key-dashed" aria-hidden="true"></span>Repeat rate</span>
+            </div>
+          </div>
+          <div class="position-relative">
+            <svg class="sp-terr-chart" viewBox="0 0 620 180" role="img"
+                 aria-label="Territory points and repeat rate over twelve weeks"></svg>
+            <div class="sp-spark-tooltip" id="spTerrTip" role="status"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ---- Manager comparison ---- #}
+    <div class="sp-card mt-3" id="spManagerCard">
+      <div class="sp-toolbar">
+        <h2 class="mb-0">Manager comparison</h2>
+      </div>
+      <div class="sp-table-wrap">
+        <table class="sp-table" id="spManagerTable">
+          <thead>
+            <tr>
+              <th scope="col" data-key="name"><button type="button" class="sp-sort">Manager <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="teamsize" class="sp-num"><button type="button" class="sp-sort sp-sort-num">Team size <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="points" class="sp-num"><button type="button" class="sp-sort sp-sort-num">Team points <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="repeat">
+                <button type="button" class="sp-sort">Avg repeat <span class="sp-caret" aria-hidden="true">&#9662;</span></button>
+                <span class="sp-muted sp-small d-block">Terr. avg {{ terr_avg.repeat_rate }}%</span>
+              </th>
+              <th scope="col" data-key="ontime">
+                <button type="button" class="sp-sort">On-time <span class="sp-caret" aria-hidden="true">&#9662;</span></button>
+                <span class="sp-muted sp-small d-block">Terr. avg {{ terr_avg.on_time_rate }}%</span>
+              </th>
+              <th scope="col" data-key="csat" class="sp-num"><button type="button" class="sp-sort sp-sort-num">CSAT <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="overtime" class="sp-num"><button type="button" class="sp-sort sp-sort-num">Overtime <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+              <th scope="col" data-key="programs" class="sp-num"><button type="button" class="sp-sort sp-sort-num">Programs <span class="sp-caret" aria-hidden="true">&#9662;</span></button></th>
+            </tr>
+          </thead>
+          <tbody id="spManagerBody">
+            {% for m in managers %}
+            <tr class="sp-row" role="button" tabindex="0" aria-expanded="false" aria-controls="mgr-{{ m.id }}"
+                data-name="{{ m.name }}" data-teamsize="{{ m.team_size }}" data-points="{{ m.points }}"
+                data-repeat="{{ m.repeat_rate }}" data-ontime="{{ m.on_time_rate }}" data-csat="{{ m.csat }}"
+                data-overtime="{{ m.overtime_hours }}" data-programs="{{ m.programs_authored }}">
+              <td>{{ m.name }}<span class="sp-muted sp-small d-block">{{ m.team }}</span></td>
+              <td class="sp-num">{{ m.team_size }}</td>
+              <td class="sp-num">{{ m.points }}</td>
+              <td><span class="sp-databar"><span class="sp-databar-fill" style="width: {{ m.repeat_pct }}%"></span><span class="sp-databar-text">{{ m.repeat_rate }}%</span></span></td>
+              <td><span class="sp-databar"><span class="sp-databar-fill" style="width: {{ m.on_time_pct }}%"></span><span class="sp-databar-text">{{ m.on_time_rate }}%</span></span></td>
+              <td class="sp-num">{{ m.csat }}</td>
+              <td class="sp-num">{{ m.overtime_hours }}</td>
+              <td class="sp-num">{{ m.programs_authored }}</td>
+            </tr>
+            <tr class="sp-detail-row" id="mgr-{{ m.id }}">
+              <td colspan="8">
+                <div class="sp-detail-inner">
+                  <div class="sp-detail-body sp-mgr-detail">
+                    <div>
+                      <h3 class="mb-2">Team composition by tier</h3>
+                      <div class="sp-tierbar">
+                        <span class="sp-tierbar-seg sp-tierbar-bronze" style="flex-grow: {{ m.tier_counts.bronze|default:0 }}" title="Bronze: {{ m.tier_counts.bronze|default:0 }}"></span>
+                        <span class="sp-tierbar-seg sp-tierbar-silver" style="flex-grow: {{ m.tier_counts.silver|default:0 }}" title="Silver: {{ m.tier_counts.silver|default:0 }}"></span>
+                        <span class="sp-tierbar-seg sp-tierbar-gold" style="flex-grow: {{ m.tier_counts.gold|default:0 }}" title="Gold: {{ m.tier_counts.gold|default:0 }}"></span>
+                      </div>
+                      <p class="sp-muted sp-small mb-0 mt-2">
+                        {{ m.tier_counts.bronze|default:0 }} bronze &middot; {{ m.tier_counts.silver|default:0 }} silver &middot; {{ m.tier_counts.gold|default:0 }} gold
+                      </p>
+                    </div>
+                    <div>
+                      <h3 class="mb-2">Programs authored</h3>
+                      <p class="sp-kpi-value mb-0">{{ m.programs_authored }}</p>
+                      <p class="sp-muted sp-small mb-0">Incentive programs created by {{ m.name }} this quarter</p>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr class="sp-empty-row"><td colspan="8">No managers in this territory yet</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Director overview: ROI headline, territory trend chart, manager table sort + expand. */
+  (function () {
+    var ns = "http://www.w3.org/2000/svg";
+
+    /* --- ROI headline: count up, then reformat compactly --- */
+    var roiEl = document.getElementById("spRoiHeadline");
+    if (roiEl) {
+      var roiRaw = Number(roiEl.getAttribute("data-count")) || 0;
+      var formatCompact = function (n) {
+        if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+        if (n >= 1e3) return Math.round(n / 1e3) + "K";
+        return Math.round(n).toLocaleString();
+      };
+      if (window.SP && SP.reducedMotion) {
+        roiEl.textContent = formatCompact(roiRaw);
+      } else {
+        setTimeout(function () { roiEl.textContent = formatCompact(roiRaw); }, 1600);
+      }
+    }
+
+    /* --- ROI assumptions disclosure --- */
+    var roiBtn = document.getElementById("spRoiDiscloseBtn");
+    if (roiBtn) {
+      var roiBody = document.getElementById("spRoiDiscloseBody");
+      roiBtn.addEventListener("click", function () {
+        var open = roiBtn.getAttribute("aria-expanded") === "true";
+        roiBtn.setAttribute("aria-expanded", String(!open));
+        roiBtn.textContent = open ? "Show assumptions" : "Hide assumptions";
+        if (roiBody) roiBody.style.height = open ? "0px" : roiBody.scrollHeight + "px";
+      });
+    }
+
+    /* --- Territory trend: two series, shared x-axis, independent scaling --- */
+    var trendCard = document.getElementById("spTerrTrend");
+    var trendSvg = document.querySelector(".sp-terr-chart");
+    var trendTip = document.getElementById("spTerrTip");
+    if (trendCard && trendSvg && trendTip && trendCard.dataset.trend) {
+      var DATA = null;
+      try { DATA = JSON.parse(trendCard.dataset.trend); } catch (e) { DATA = null; }
+
+      if (DATA && DATA.points && DATA.repeat && DATA.points.length) {
+        var W = 620, H = 180, padX = 20, padY = 16;
+        var n = DATA.points.length;
+
+        var xAt = function (i) { return padX + i * (W - padX * 2) / (n - 1); };
+        var scaleY = function (values) {
+          var lo = Math.min.apply(null, values), hi = Math.max.apply(null, values);
+          var span = (hi - lo) || 1;
+          return function (v) { return H - padY - (v - lo) / span * (H - padY * 2); };
+        };
+        var yPoints = scaleY(DATA.points);
+        var yRepeat = scaleY(DATA.repeat);
+
+        var toPolyline = function (values, yFn) {
+          var pts = [];
+          for (var i = 0; i < n; i++) pts.push(xAt(i).toFixed(1) + "," + yFn(values[i]).toFixed(1));
+          return pts.join(" ");
+        };
+
+        var solidLine = document.createElementNS(ns, "polyline");
+        solidLine.setAttribute("class", "sp-terr-line");
+        solidLine.setAttribute("points", toPolyline(DATA.points, yPoints));
+        trendSvg.appendChild(solidLine);
+
+        var dashedLine = document.createElementNS(ns, "polyline");
+        dashedLine.setAttribute("class", "sp-terr-line-alt");
+        dashedLine.setAttribute("points", toPolyline(DATA.repeat, yRepeat));
+        trendSvg.appendChild(dashedLine);
+
+        var showTip = function (i, x, y) {
+          trendTip.textContent = "Week " + (i + 1) + ": " + DATA.points[i].toLocaleString() +
+            " pts · " + DATA.repeat[i] + "% repeat";
+          trendTip.style.left = (x / W * 100) + "%";
+          trendTip.style.top = (y / H * 100) + "%";
+          trendTip.classList.add("is-visible");
+        };
+        var hideTip = function () { trendTip.classList.remove("is-visible"); };
+
+        for (var i = 0; i < n; i++) {
+          var x = xAt(i), y1 = yPoints(DATA.points[i]), y2 = yRepeat(DATA.repeat[i]);
+          var g = document.createElementNS(ns, "g");
+          g.setAttribute("class", "sp-spark-point");
+          g.setAttribute("tabindex", "0");
+
+          var dot1 = document.createElementNS(ns, "circle");
+          dot1.setAttribute("class", "sp-spark-dot");
+          dot1.setAttribute("cx", x); dot1.setAttribute("cy", y1); dot1.setAttribute("r", "3");
+          var dot2 = document.createElementNS(ns, "circle");
+          dot2.setAttribute("class", "sp-spark-dot");
+          dot2.setAttribute("cx", x); dot2.setAttribute("cy", y2); dot2.setAttribute("r", "3");
+          var hit = document.createElementNS(ns, "circle");
+          hit.setAttribute("class", "sp-spark-hit");
+          hit.setAttribute("cx", x); hit.setAttribute("cy", (y1 + y2) / 2); hit.setAttribute("r", "16");
+
+          g.appendChild(dot1); g.appendChild(dot2); g.appendChild(hit);
+          (function (idx, px, py) {
+            g.addEventListener("mouseenter", function () { g.classList.add("is-active"); showTip(idx, px, py); });
+            g.addEventListener("mouseleave", function () { g.classList.remove("is-active"); hideTip(); });
+            g.addEventListener("focus", function () { g.classList.add("is-active"); showTip(idx, px, py); });
+            g.addEventListener("blur", function () { g.classList.remove("is-active"); hideTip(); });
+          })(i, x, (y1 + y2) / 2);
+          trendSvg.appendChild(g);
+        }
+      }
+    }
+
+    /* --- Manager comparison table: sort + one-at-a-time row expand --- */
+    var table = document.getElementById("spManagerTable");
+    var body = document.getElementById("spManagerBody");
+    if (table && body) {
+      var pairs = Array.prototype.slice.call(body.querySelectorAll(".sp-row")).map(function (row) {
+        return { row: row, detail: row.nextElementSibling };
+      });
+      var sortKey = "points", sortAsc = false, openDetail = null;
+
+      var value = function (row, key) {
+        var raw = row.dataset[key];
+        return key === "name" ? (raw || "").toLowerCase() : Number(raw);
+      };
+
+      var applySort = function () {
+        pairs.sort(function (a, b) {
+          var x = value(a.row, sortKey), y = value(b.row, sortKey);
+          if (x === y) return value(a.row, "points") - value(b.row, "points");
+          return (x > y ? 1 : -1) * (sortAsc ? 1 : -1);
+        });
+        pairs.forEach(function (p) { body.append(p.row, p.detail); });
+      };
+
+      table.querySelectorAll("th[data-key]").forEach(function (th) {
+        var btn = th.querySelector(".sp-sort");
+        if (!btn) return;
+        btn.addEventListener("click", function () {
+          var key = th.dataset.key;
+          sortAsc = key === sortKey ? !sortAsc : true;
+          sortKey = key;
+          table.querySelectorAll("th[data-key]").forEach(function (o) { o.removeAttribute("aria-sort"); });
+          th.setAttribute("aria-sort", sortAsc ? "ascending" : "descending");
+          body.style.opacity = ".35";
+          setTimeout(function () { applySort(); body.style.opacity = "1"; }, 120);
+        });
+      });
+
+      var closeDetail = function () {
+        if (!openDetail) return;
+        openDetail.classList.remove("is-open");
+        openDetail.previousElementSibling.setAttribute("aria-expanded", "false");
+        openDetail = null;
+      };
+      var toggleDetail = function (row) {
+        var detail = row.nextElementSibling;
+        if (detail === openDetail) { closeDetail(); return; }
+        closeDetail();
+        detail.classList.add("is-open");
+        row.setAttribute("aria-expanded", "true");
+        openDetail = detail;
+      };
+      pairs.forEach(function (pair) {
+        pair.row.addEventListener("click", function () { toggleDetail(pair.row); });
+        pair.row.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleDetail(pair.row); }
+        });
+      });
+
+      applySort();
+    }
+  })();
+</script>
+{% endblock %}

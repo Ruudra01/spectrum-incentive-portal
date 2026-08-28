@@ -161,6 +161,23 @@
           {% endif %}
         </div>
 
+        {# Closes the loop: a director approves a program, this agent sees it. #}
+        {% if active_programs %}
+        <div class="sp-card p-4 mt-3">
+          <h2 class="mb-1">Active programs</h2>
+          <p class="sp-muted sp-small mb-3">Extra points available on your team right now.</p>
+          {% for program in active_programs %}
+          <div class="sp-active-prog">
+            <p class="sp-active-prog-name mb-1">{{ program.name }}</p>
+            {% for rule in program.rule_texts %}
+            <p class="sp-active-prog-rule mb-0">{{ rule }}</p>
+            {% endfor %}
+            <p class="sp-active-prog-rule mb-0">Runs to {{ program.end_date }}</p>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
         {% include "dashboard/partials/_ai_insights.html" %}
 
         {# --- What-if simulator --- #}

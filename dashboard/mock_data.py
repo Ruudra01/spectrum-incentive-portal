@@ -407,6 +407,77 @@ def agent_weekly_points(agent, weeks=8):
 
 
 # ---------------------------------------------------------------------------
+# Director workspace reference data
+# ---------------------------------------------------------------------------
+# These drive MODELLED estimates only — never measured results. Each is a
+# stand-in assumption plugged into a simple multiplication so the director's
+# ROI view has a number to show, not a figure pulled from a finance system.
+ROI_ASSUMPTIONS = {
+    "cost_per_truck_roll": {
+        "value": 165.0,
+        "label": "Cost per truck roll",
+        "source": "Demo assumption, not a measured figure.",
+    },
+    "cost_to_replace_technician": {
+        "value": 28500.0,
+        "label": "Cost to replace a technician",
+        "source": "Demo assumption, not a measured figure.",
+    },
+    "loaded_hourly_rate": {
+        "value": 62.0,
+        "label": "Loaded hourly rate",
+        "source": "Demo assumption, not a measured figure.",
+    },
+    "program_leverage": {
+        "value": 3.2,
+        "label": "Modelled benefit per $1 of program spend",
+        "source": "Demo assumption: an assumed multiplier, not a measured return.",
+    },
+}
+
+# Quarter-to-date MODELLED volumes — inputs to the ROI attribution lines, not
+# counts pulled from a ticketing system.
+ROI_MODEL = {
+    "repeat_visits_avoided": 1180,
+    "techs_retained": 9,
+    "hours_saved": 4200,
+}
+
+TERRITORY = {
+    "nps": 41, "nps_prev": 37,
+    "retention_rate": 88.5, "retention_prev": 85.2,
+    "efficiency": 91.4, "efficiency_prev": 89.1,
+    "repeat_rate": 8.9, "repeat_prev": 9.8,
+    "quarterly_budget": 2100000,
+    "technicians": 142,
+    "managers": 6,
+    "name": "Great Lakes Territory",
+    "quarter": "Q3 2026",
+}
+
+# 12 weeks of territory totals for the trend chart. Points trend gently up
+# while repeat rate trends gently down (fewer repeats = improving), so the
+# two lines read as inversely correlated.
+TERRITORY_WEEKLY = {
+    "points": [18400, 18900, 19300, 19800, 20200, 20700,
+               21300, 21900, 22600, 23200, 23900, 24600],
+    "repeat_rate": [10.1, 9.9, 9.8, 9.6, 9.5, 9.3,
+                    9.1, 9.0, 8.8, 8.7, 8.5, 8.4],
+}
+
+# Rollups for the five managers who are not the demo login. Marcus Vale (884)
+# is deliberately absent — his numbers are computed live from his real 18
+# technicians in LEADERBOARD, never stood up here.
+MANAGER_TEAM_STATS = {
+    885: {"points": 52300, "repeat_rate": 8.1, "on_time_rate": 90.2, "csat": 4.4, "overtime_hours": 38.5},
+    886: {"points": 44100, "repeat_rate": 9.4, "on_time_rate": 87.6, "csat": 4.2, "overtime_hours": 52.0},
+    887: {"points": 61800, "repeat_rate": 7.6, "on_time_rate": 92.8, "csat": 4.6, "overtime_hours": 29.0},
+    888: {"points": 58900, "repeat_rate": 8.8, "on_time_rate": 89.1, "csat": 4.3, "overtime_hours": 46.5},
+    889: {"points": 55200, "repeat_rate": 9.0, "on_time_rate": 88.4, "csat": 4.1, "overtime_hours": 41.0},
+}
+
+
+# ---------------------------------------------------------------------------
 # Notification preferences, keyed by role so the template loops one list.
 # ---------------------------------------------------------------------------
 _BASE_PREF_GROUPS = [
@@ -584,4 +655,34 @@ if __name__ == "__main__":
     # Ledger
     assert points_to_usd(1000) == 180.0
     assert POINT_VALUE_USD == 0.18
+
+    # Director workspace reference data
+    assert set(ROI_ASSUMPTIONS) == {
+        "cost_per_truck_roll", "cost_to_replace_technician",
+        "loaded_hourly_rate", "program_leverage"}
+    for key, assumption in ROI_ASSUMPTIONS.items():
+        assert "demo" in assumption["source"].lower(), key
+        assert isinstance(assumption["value"], float), key
+    assert ROI_ASSUMPTIONS["program_leverage"]["value"] == 3.2
+
+    assert set(ROI_MODEL) == {"repeat_visits_avoided", "techs_retained", "hours_saved"}
+
+    assert TERRITORY["name"] == "Great Lakes Territory"
+    assert TERRITORY["managers"] == len(ORG["managers"])
+    assert TERRITORY["technicians"] == DIRECTOR_PROFILE["technicians_count"]
+
+    assert len(TERRITORY_WEEKLY["points"]) == 12
+    assert len(TERRITORY_WEEKLY["repeat_rate"]) == 12
+    assert all(18000 <= p <= 26000 for p in TERRITORY_WEEKLY["points"])
+    assert all(8.4 <= r <= 10.2 for r in TERRITORY_WEEKLY["repeat_rate"])
+    assert TERRITORY_WEEKLY["points"][-1] > TERRITORY_WEEKLY["points"][0], "points trend up"
+    assert TERRITORY_WEEKLY["repeat_rate"][-1] < TERRITORY_WEEKLY["repeat_rate"][0], \
+        "repeat rate trends down (improving)"
+
+    assert 884 not in MANAGER_TEAM_STATS, "Marcus's numbers are computed live"
+    assert set(MANAGER_TEAM_STATS) == {
+        m["id"] for m in ORG["managers"] if not m["is_demo_user"]}
+    for manager_id, stats in MANAGER_TEAM_STATS.items():
+        assert set(stats) == {"points", "repeat_rate", "on_time_rate", "csat", "overtime_hours"}, manager_id
+
     print("mock_data OK")

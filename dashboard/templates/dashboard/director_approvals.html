@@ -1,0 +1,351 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Approvals — Spectrum Incentive Portal{% endblock %}
+
+{% block content %}
+<div class="sp-page">
+  <div class="container">
+
+    <header class="sp-page-header">
+      <div>
+        <h1>Approvals</h1>
+        <p class="sp-muted sp-small mb-0 mt-1">
+          {{ queue_count }} program{{ queue_count|pluralize }} awaiting your approval
+        </p>
+      </div>
+      <p class="sp-muted sp-small mb-0 ms-auto text-lg-end">{{ reviewed_today }} reviewed today</p>
+    </header>
+
+    <div class="sp-review-grid mt-3">
+
+      {# ---------- LIST PANE ---------- #}
+      <div class="sp-review-list">
+        <div class="sp-card">
+          <div class="sp-toolbar">
+            <label class="visually-hidden" for="spSort">Sort programs</label>
+            <form method="get" class="w-100">
+              <select class="sp-control sp-control-sm" id="spSort" name="sort" onchange="this.form.submit()">
+                <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest first</option>
+                <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+                <option value="budget" {% if sort == 'budget' %}selected{% endif %}>Highest budget</option>
+                <option value="author" {% if sort == 'author' %}selected{% endif %}>Author name</option>
+              </select>
+            </form>
+          </div>
+          <div class="sp-toolbar">
+            <div class="sp-chips" id="spQueueChips" role="group" aria-label="Filter queue">
+              <button type="button" class="sp-chip" data-value="all" aria-pressed="true">All</button>
+              <button type="button" class="sp-chip" data-value="awaiting" aria-pressed="false">Awaiting approval</button>
+              <button type="button" class="sp-chip" data-value="stale" aria-pressed="false">Over 5 days</button>
+            </div>
+          </div>
+
+          <ul class="sp-queue" id="spQueue">
+            {% for p in queue %}
+            <li class="sp-queue-item {% if selected and p.id == selected.id %}is-selected{% endif %}"
+                data-stale="{% if p.stale %}1{% else %}0{% endif %}">
+              <a href="?g={{ p.id }}&sort={{ sort }}">
+                <span class="sp-avatar sp-avatar-sm" aria-hidden="true">{{ p.owner_name|slice:":1" }}{{ p.owner_name|cut:" "|slice:"1:2" }}</span>
+                <span class="sp-queue-body">
+                  <span class="sp-queue-name">{{ p.name }}</span>
+                  <span class="sp-queue-meta">
+                    {{ p.owner_name }} &middot; {{ p.target_team }} &middot; ${{ p.budget_estimate|floatformat:0 }}
+                  </span>
+                  <span class="sp-queue-age {% if p.stale %}is-stale{% endif %}">{{ p.age_label }}</span>
+                </span>
+              </a>
+            </li>
+            {% empty %}
+            <li class="sp-queue-empty">Nothing awaiting approval</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+
+      {# ---------- DETAIL PANE ---------- #}
+      <div class="sp-review-detail">
+        {% if selected %}
+        <form method="post" id="spReviewForm">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="review">
+          <input type="hidden" name="program_id" value="{{ selected.id }}">
+          <input type="hidden" name="status" id="spStatus" value="">
+
+          <div class="sp-card sp-prog-review">
+            <div class="sp-review-head">
+              <div>
+                <h2 class="mb-1">{{ selected.name }}</h2>
+                <p class="sp-muted sp-small mb-0">
+                  {{ selected.owner_name }} &middot; {{ selected.target_team }}
+                </p>
+              </div>
+              <p class="sp-review-age {% if selected.stale %}is-stale{% endif %} mb-0 ms-auto">{{ selected.age_label }}</p>
+            </div>
+
+            {# --- program exactly as the author previewed it --- #}
+            <dl class="sp-prog-meta">
+              <div><dt>Name</dt><dd>{{ selected.name }}</dd></div>
+              <div><dt>Dates</dt><dd>{{ selected.start_date }} &rarr; {{ selected.end_date }} &middot; {{ sel_metrics.duration_weeks }} wks</dd></div>
+              <div><dt>Description</dt><dd>{{ selected.description|default:"—" }}</dd></div>
+              <div><dt>Scope</dt><dd>{{ selected.target_scope }}</dd></div>
+              <div><dt>Job types</dt><dd>{% for label in sel_job_labels %}{{ label }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="sp-muted">None selected</span>{% endfor %}</dd></div>
+              <div><dt>Rules</dt><dd>
+                {% for text in sel_rule_texts %}{{ text }}{% if not forloop.last %}; {% endif %}{% empty %}<span class="sp-muted">None</span>{% endfor %}
+              </dd></div>
+              <div><dt>Participants</dt><dd>{{ selected.expected_participants }}</dd></div>
+              <div><dt>Budget</dt><dd>${{ selected.budget_estimate|floatformat:0 }}</dd></div>
+              <div><dt>Success metric</dt><dd>{{ sel_metric_label|default:"—" }} &rarr; {{ selected.success_target }}</dd></div>
+              <div><dt>Projected points</dt><dd>{{ sel_metrics.projected_points }} pts</dd></div>
+              <div><dt>Estimated ROI</dt><dd>{{ sel_metrics.estimated_roi }}</dd></div>
+            </dl>
+          </div>
+
+          <div class="sp-card p-4 mt-3">
+            <p class="sp-eyebrow mb-2">Budget impact</p>
+            <div class="sp-budget-bar">
+              <div class="sp-budget-fill {% if would_exceed %}is-over{% endif %}" style="width: {{ budget.used_percent }}%"></div>
+            </div>
+            <div class="sp-budget-legend">
+              <span>Committed: ${{ budget.committed|floatformat:0 }}</span>
+              <span>Remaining: ${{ budget.remaining|floatformat:0 }}</span>
+              <span>Quarterly total: ${{ budget.quarterly_budget|floatformat:0 }}</span>
+            </div>
+            {% if would_exceed %}
+            <div class="sp-overage">
+              This program exceeds remaining budget by ${{ overage|floatformat:0 }}. Approval is still allowed — the overage is on the record.
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="sp-card p-4 mt-3">
+            <p class="sp-eyebrow mb-2">Conflict check</p>
+            {% for c in conflicts %}
+            <div class="sp-conflict">
+              <strong>{{ c.name }}</strong> ({{ c.owner_name }}) runs {{ c.start_date }} &rarr; {{ c.end_date }}
+              &middot; overlapping job types: {{ c.overlap_job_types|join:", " }}
+            </div>
+            {% empty %}
+            <div class="sp-conflict-clear">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M3 8.5L6.5 12L13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              No overlapping programs
+            </div>
+            {% endfor %}
+          </div>
+
+          <div class="sp-card p-4 mt-3">
+            <p class="sp-eyebrow mb-2">Decision</p>
+            <div class="sp-decide" role="group" aria-label="Decision for {{ selected.name }}">
+              <button type="button" class="sp-decide-btn" data-status="approved">Approve</button>
+              <button type="button" class="sp-decide-btn" data-status="changes_requested">Request changes</button>
+              <button type="button" class="sp-decide-btn" data-status="rejected">Reject</button>
+            </div>
+
+            <div class="sp-cap-field mt-3" id="spCapField" hidden>
+              <label class="sp-label mb-0" for="spBudgetCap">Adjusted budget cap (optional)</label>
+              <input class="sp-control sp-control-sm" type="number" id="spBudgetCap" name="budget_cap" min="0" step="100">
+            </div>
+
+            <div class="sp-note-wrap" id="spNoteWrap" hidden>
+              <label class="sp-label" for="spNote">Note <span class="sp-required">required</span></label>
+              <textarea class="sp-control" id="spNote" name="note" rows="3"
+                        placeholder="Tell them exactly what to change."></textarea>
+            </div>
+          </div>
+
+          <div class="sp-submitbar sp-review-footer" id="spReviewBar">
+            <span class="sp-submitbar-text" id="spDecisionSummary">No decision yet</span>
+            <button type="submit" class="btn-sp-primary" id="spSubmitReview" disabled>Submit decision</button>
+          </div>
+        </form>
+        {% else %}
+        <div class="sp-card sp-empty-card">
+          <h2 class="mb-2">Nothing awaiting approval</h2>
+          <p class="sp-muted mb-0">{{ reviewed_today }} program{{ reviewed_today|pluralize }} reviewed today.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ---------- HISTORY ---------- #}
+    <div class="sp-card p-4 mt-3">
+      <button type="button" class="sp-disclose" id="spHistoryToggle" aria-expanded="false" aria-controls="spHistory">
+        Decisions you've made ({{ history|length }})
+      </button>
+      <div class="sp-disclose-body" id="spHistory">
+        <div class="sp-disclose-inner">
+          <table class="sp-table">
+            <tbody>
+              {% for entry in history %}
+              <tr>
+                <td>{{ entry.name }}</td>
+                <td class="sp-muted">{{ entry.owner_name }}</td>
+                <td>{% include "dashboard/partials/_status_pill.html" with status=entry.status label=entry.status_label %}</td>
+                <td class="sp-muted">{{ entry.director_note|default:"—" }}</td>
+                <td class="sp-muted">{{ entry.reviewed_at }}</td>
+                <td>
+                  {% if entry.reopenable %}
+                  <button type="button" class="btn-sp-secondary sp-btn-sm sp-reopen" data-program="{{ entry.id }}">Reopen</button>
+                  {% else %}
+                  <span class="sp-muted sp-small">Closed</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td class="sp-muted">No decisions yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Reopen note #}
+<div class="sp-modal-scrim" id="spReopenScrim" hidden>
+  <div class="sp-modal" role="dialog" aria-modal="true" aria-labelledby="spReopenTitle">
+    <h2 id="spReopenTitle">Reopen this program?</h2>
+    <p class="sp-muted sp-small mt-1">It goes back to the manager as "changes requested".</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="reopen">
+      <input type="hidden" name="program_id" id="spReopenId">
+      <label class="sp-label mt-3" for="spReopenNote">Reason <span class="sp-required">required</span></label>
+      <textarea class="sp-control" id="spReopenNote" name="note" rows="3" required></textarea>
+      <div class="sp-modal-actions">
+        <button type="button" class="btn-sp-secondary" id="spReopenCancel">Cancel</button>
+        <button type="submit" class="btn-sp-primary" id="spReopenConfirm" disabled>Reopen</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Director approvals. A reject or change request without a note is refused
+     here and again in store.review_program — an unexplained decision is
+     exactly the opacity this portal exists to remove. */
+  (function () {
+    var form = document.getElementById("spReviewForm");
+
+    /* --- queue filter chips --- */
+    var chips = document.getElementById("spQueueChips");
+    if (chips) {
+      chips.addEventListener("click", function (e) {
+        var chip = e.target.closest(".sp-chip");
+        if (!chip) return;
+        chips.querySelectorAll(".sp-chip").forEach(function (c) {
+          c.setAttribute("aria-pressed", String(c === chip));
+        });
+        var mode = chip.dataset.value;
+        document.querySelectorAll("#spQueue .sp-queue-item").forEach(function (item) {
+          item.hidden = mode === "stale" && item.dataset.stale !== "1";
+        });
+      });
+    }
+
+    /* --- history disclosure --- */
+    var histToggle = document.getElementById("spHistoryToggle");
+    var hist = document.getElementById("spHistory");
+    if (histToggle && hist) {
+      histToggle.addEventListener("click", function () {
+        var open = histToggle.getAttribute("aria-expanded") === "true";
+        histToggle.setAttribute("aria-expanded", String(!open));
+        hist.style.height = open ? "0px" : hist.scrollHeight + "px";
+      });
+    }
+
+    /* --- reopen modal --- */
+    var reopenScrim = document.getElementById("spReopenScrim");
+    var reopenNote = document.getElementById("spReopenNote");
+    var reopenConfirm = document.getElementById("spReopenConfirm");
+    var reopenTrigger = null;
+    document.querySelectorAll(".sp-reopen").forEach(function (button) {
+      button.addEventListener("click", function () {
+        reopenTrigger = button;
+        document.getElementById("spReopenId").value = button.dataset.program;
+        reopenNote.value = "";
+        reopenConfirm.disabled = true;
+        reopenScrim.hidden = false;
+        requestAnimationFrame(function () { reopenScrim.classList.add("is-open"); });
+        reopenNote.focus();
+      });
+    });
+    if (reopenNote) {
+      reopenNote.addEventListener("input", function () {
+        reopenConfirm.disabled = !reopenNote.value.trim();
+      });
+    }
+    function closeReopen() {
+      reopenScrim.classList.remove("is-open");
+      setTimeout(function () { reopenScrim.hidden = true; }, 180);
+      if (reopenTrigger) reopenTrigger.focus();
+    }
+    var reopenCancel = document.getElementById("spReopenCancel");
+    if (reopenCancel) reopenCancel.addEventListener("click", closeReopen);
+    if (reopenScrim) {
+      reopenScrim.addEventListener("click", function (e) { if (e.target === reopenScrim) closeReopen(); });
+    }
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && reopenScrim && !reopenScrim.hidden) closeReopen();
+    });
+
+    if (!form) return;
+
+    /* --- decision --- */
+    var statusField = document.getElementById("spStatus");
+    var noteWrap = document.getElementById("spNoteWrap");
+    var noteField = document.getElementById("spNote");
+    var capField = document.getElementById("spCapField");
+    var summary = document.getElementById("spDecisionSummary");
+    var submit = document.getElementById("spSubmitReview");
+
+    var LABELS = { approved: "Approve", changes_requested: "Request changes", rejected: "Reject" };
+
+    function noteRequired(status) {
+      return status === "rejected" || status === "changes_requested";
+    }
+
+    function refresh() {
+      var status = statusField.value;
+      if (!status) {
+        summary.textContent = "No decision yet";
+        submit.disabled = true;
+        return;
+      }
+      var blocked = noteRequired(status) && !noteField.value.trim();
+      summary.textContent = LABELS[status] + (blocked ? " — a note is required" : "");
+      submit.disabled = blocked;
+    }
+
+    form.querySelectorAll(".sp-decide-btn").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var status = button.dataset.status;
+        var next = statusField.value === status ? "" : status;
+        statusField.value = next;
+
+        form.querySelectorAll(".sp-decide-btn").forEach(function (b) {
+          b.classList.toggle("is-chosen", b.dataset.status === next);
+        });
+        noteWrap.hidden = !noteRequired(next);
+        capField.hidden = next !== "approved";
+        if (noteRequired(next)) noteField.focus();
+        refresh();
+      });
+    });
+
+    form.addEventListener("input", function (e) {
+      if (e.target === noteField) refresh();
+    });
+
+    refresh();
+  })();
+
+  {% if done %}SP.toast("Program approved — {{ done }} notified.");{% endif %}
+  {% if refused %}SP.toast("That decision needed a reason and was not applied.");{% endif %}
+  {% if reopened %}SP.toast("Program reopened for changes.");{% endif %}
+</script>
+{% endblock %}

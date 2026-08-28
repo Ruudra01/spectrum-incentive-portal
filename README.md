@@ -193,6 +193,32 @@ to `/profile/` and `/notifications/`, and Sign Out is a CSRF-protected POST form
 not a link. Signed **out**, a single "Sign in" pill replaces it. The login page
 hides the nav links and profile menu entirely, showing only the logo lockup.
 
+## Demo script — the full three-role round trip
+
+This is the walkthrough the portal is built to support. Use three separate
+browser sessions (or one normal + two incognito windows) so all three roles are
+signed in at once. Password for every account is `spectrum2026`.
+
+| | Who | Do this |
+|---|---|---|
+| 1 | **Dana** `agent@spectrum.com` | Open **Log Work**. Add three jobs — pick a job type, work order, address, and toggle a modifier or two, watching the live points preview. Click **Submit day for approval**. |
+| 2 | **Marcus** `manager@spectrum.com` | Open **Approvals** — the navbar badge now includes Dana's day. Approve two entries; on the third choose **Request changes** and write a reason. The submit button stays disabled until you do. |
+| 3 | **Dana** | Reload the dashboard: the approved points have moved from *pending* to the banked ledger figure. On **Log Work**, the third entry shows Marcus's note and is editable again. Fix it and resubmit. |
+| 4 | **Marcus** | Open **Programs → Create program**. Fill the three sections — the preview pane mirrors what the director will see, and the budget auto-computes from participants × bonus points × the point rate. **Submit for director approval**. |
+| 5 | **Priya** `director@spectrum.com` | Open **Programs**. Select Marcus's new proposal plus two existing ones — up to three compare side by side, with the most favourable value in each numeric row highlighted. Then open **Approvals**: see the budget impact against the remaining quarter and any overlapping approved program. Approve it with a note. |
+| 6 | **Marcus / Dana** | Marcus's program list shows the new status. Dana's dashboard shows the program under **Active programs**, with the bonus rule in plain language. |
+
+Reset between runs with:
+
+```bash
+curl -X POST http://127.0.0.1:8000/dev/reset-store/
+```
+
+> **Run a single worker.** `store.py` is process-global memory (see below). With
+> more than one worker the three roles can land on different processes and see
+> different worlds. `manage.py runserver` is single-process by default, which is
+> what this demo needs.
+
 ## Roles
 
 Three roles, three demo accounts. **Password for all three: `spectrum2026`.**
@@ -442,6 +468,76 @@ only registered colours. Run the self-check with:
   os.environ.setdefault('DJANGO_SETTINGS_MODULE','spectrum_portal.settings'); \
   django.setup(); runpy.run_module('dashboard.insights', run_name='__main__')"
 ```
+
+## Director workspace
+
+Priya oversees 6 managers and 142 technicians. Her pages are **aggregate-first** —
+there is deliberately no drill-down to an individual technician anywhere in this
+role, because her accountability is regional numbers, not individual coaching.
+
+### ROI tracker — modelled, not measured
+
+The overview's headline is an estimate of quarterly savings attributable to the
+incentive program, broken into three attributed lines:
+
+| Line | Arithmetic |
+|---|---|
+| Reduced repeat visits | repeat visits avoided × cost per truck roll |
+| Lower technician turnover | technicians retained × cost to replace one |
+| Improved first-time fix | hours saved × loaded hourly rate |
+
+> Every input lives in `mock_data.ROI_ASSUMPTIONS`, each carrying a `source`
+> field that states plainly it is a **demo assumption, not a measured figure**.
+> The page repeats that caveat and exposes all four assumptions in an expandable
+> block. Presenting a modelled number as measured fact is exactly the failure
+> this design guards against, so the distinction is made visible rather than
+> buried — a director reading the figure can see which is which.
+
+Verified: each line equals its stated arithmetic against `ROI_ASSUMPTIONS`, the
+total is their sum, and net = total − approved program spend.
+
+### Program comparison
+
+Up to three programs sit side by side in a real table (sticky attribute column,
+horizontal scroll on narrow screens). Selection is driven by the query string, so
+a comparison is shareable and survives the back button.
+
+Numeric rows highlight the **most favourable** value — and favourability is
+declared per attribute rather than assumed, because it runs in both directions:
+lower is better for estimated budget and cost per participant, higher is better
+for expected participants, projected point volume and estimated ROI. Cost per
+participant and projected volume are computed in `store.program_metrics()` from
+the program's own rules, never hand-entered. A "Show only differences" toggle
+collapses rows where every selected program matches, and a gap in a proposal
+renders an explicit "Not specified" rather than an ambiguous blank cell.
+
+### Program approval
+
+Each proposal is shown against remaining quarterly budget with a usage bar, and
+a conflict check lists any already-approved program overlapping **both** the date
+range and the job types — two programs paying for the same work being the mistake
+that check exists to catch. Approving over budget is allowed but states the
+overage explicitly; the decision stays the director's.
+
+Rejecting or requesting changes **requires a note**, enforced in
+`store.review_program()` and not merely by a disabled button — the same rule the
+manager queue applies to work logs. Decisions can be reopened within 24 hours,
+also with a note.
+
+## Cross-role consistency
+
+- **One badge source.** Every navbar approval count comes from the same store
+  helper the page itself uses (`count_submitted_for_manager`,
+  `count_pending_programs`) — never a separate tally that can drift.
+- **One status pill.** `partials/_status_pill.html` plus a single CSS block
+  renders work-log and program statuses identically everywhere they appear.
+- **The loop closes.** A director approves a program and the field agent sees it
+  on their dashboard under **Active programs**, with the bonus rule written out
+  in plain language.
+- **Role-aware assistant.** `chat_responses.responses_for_role(role)` layers a
+  manager topic (how to review submissions) and a director topic (how program
+  approval works) on top of the shared six, through one code path. An agent
+  asking a manager-only question gets the fallback, not the answer.
 
 ## Interactive features
 
