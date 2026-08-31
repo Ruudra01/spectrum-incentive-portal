@@ -30,7 +30,12 @@ def _env_list(name):
     return [v.strip() for v in os.environ.get(name, "").split(",") if v.strip()]
 
 
-DEBUG = _env_flag("DJANGO_DEBUG", True)
+# Vercel sets these automatically on every deployment. Detecting the platform
+# means a forgotten DJANGO_DEBUG can never leave the site running in debug mode
+# and dumping its entire settings table to the public.
+ON_VERCEL = bool(os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"))
+
+DEBUG = _env_flag("DJANGO_DEBUG", not ON_VERCEL)
 
 # A generated key is used only for local development. Deployment must set
 # DJANGO_SECRET_KEY; the app refuses to start with the insecure default.
@@ -40,7 +45,11 @@ SECRET_KEY = os.environ.get(
 )
 if not DEBUG and SECRET_KEY.startswith("django-insecure-"):
     raise RuntimeError(
-        "DJANGO_SECRET_KEY must be set to a real value when DJANGO_DEBUG is False."
+        "DJANGO_SECRET_KEY is not set. The committed fallback key is public, so "
+        "session cookies signed with it can be forged. Set DJANGO_SECRET_KEY in "
+        "the deployment environment and redeploy. Generate one with: "
+        "python -c \"from django.core.management.utils import "
+        "get_random_secret_key as k; print(k())\""
     )
 
 # "testserver" is what Django's test Client sends, so ad-hoc scripts work
@@ -52,6 +61,24 @@ ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS") or (
 # Django requires the scheme-qualified origin for cross-origin POSTs; without
 # it every form on the deployed site fails CSRF with a 403.
 CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS")
+
+if ON_VERCEL:
+    # Vercel injects the deployment hostnames; trusting them means the site
+    # boots correctly even when DJANGO_ALLOWED_HOSTS was never configured.
+    _vercel_hosts = [
+        os.environ.get("VERCEL_URL", ""),
+        os.environ.get("VERCEL_BRANCH_URL", ""),
+        os.environ.get("VERCEL_PROJECT_PRODUCTION_URL", ""),
+    ]
+    for _host in filter(None, _vercel_hosts):
+        if _host not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(_host)
+        _origin = f"https://{_host}"
+        if _origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(_origin)
+    # Preview deployments get a generated hostname per commit.
+    if ".vercel.app" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(".vercel.app")
 
 # Vercel terminates TLS upstream, so Django needs to be told the request was
 # secure or it will build http:// URLs and reject secure cookies.

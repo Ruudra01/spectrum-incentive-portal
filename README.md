@@ -243,13 +243,17 @@ curl -X POST http://127.0.0.1:8000/dev/reset-store/
 
 ### Environment variables
 
+On Vercel, only **one** is required. The platform sets `VERCEL`, `VERCEL_URL`
+and `VERCEL_PROJECT_PRODUCTION_URL` itself, and settings.py reads them to switch
+debug off and populate `ALLOWED_HOSTS` / `CSRF_TRUSTED_ORIGINS` automatically.
+
 | Variable | Required | Notes |
 |---|---|---|
-| `DJANGO_SECRET_KEY` | **yes** | The app refuses to start when `DJANGO_DEBUG=False` and this is unset |
-| `DJANGO_DEBUG` | **yes** | `False` in deployment |
-| `DJANGO_ALLOWED_HOSTS` | **yes** | Comma-separated, e.g. `.vercel.app,portal.example.com` |
-| `CSRF_TRUSTED_ORIGINS` | **yes** | Scheme-qualified, e.g. `https://your-app.vercel.app`. Without it every POST fails with 403 |
-| `DJANGO_SECURE_SSL_REDIRECT` | no | Defaults to `True` when not in debug |
+| `DJANGO_SECRET_KEY` | **yes** | The app **refuses to boot** without it in a deployed environment — the committed fallback key is public, so cookies signed with it can be forged |
+| `DJANGO_DEBUG` | no | Auto-`False` when `VERCEL` is present. Set explicitly on other hosts |
+| `DJANGO_ALLOWED_HOSTS` | no on Vercel | Comma-separated. Needed on hosts that do not advertise themselves |
+| `CSRF_TRUSTED_ORIGINS` | no on Vercel | Scheme-qualified, e.g. `https://portal.example.com` |
+| `DJANGO_SECURE_SSL_REDIRECT` | no | Defaults `True` outside debug |
 | `DJANGO_HSTS_SECONDS` | no | Defaults to one year |
 | `ENABLE_DEV_TOOLS` | no | Defaults to `DEBUG`. Gates the unauthenticated `/dev/reset-store/` route |
 
@@ -258,6 +262,9 @@ Generate a key with:
 ```bash
 python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
 ```
+
+> **Env changes need a redeploy.** Vercel injects variables at deployment time;
+> adding one to a running deployment has no effect until you redeploy.
 
 Locally none of these are needed — every one falls back to a development
 default, so `manage.py runserver` still works with no setup.
