@@ -219,6 +219,71 @@ curl -X POST http://127.0.0.1:8000/dev/reset-store/
 > different worlds. `manage.py runserver` is single-process by default, which is
 > what this demo needs.
 
+## Deploying
+
+> ### Read this before deploying to a serverless host
+>
+> `store.py` is **process-global memory** (see the section above). Serverless
+> platforms — Vercel, Lambda, Cloud Run at scale — run many short-lived
+> instances, so a write on one request may be invisible to the next. On such a
+> host:
+>
+> * **Reads are fine.** The seed is deterministic, so every instance derives
+>   identical data — dashboards, roster, comparison grid and ROI all render
+>   correctly and consistently.
+> * **Writes are unreliable.** Submitting a day, approving work, or creating a
+>   program may not be visible to the other roles, which is the entire
+>   cross-role demo.
+>
+> For a working round-trip demo, use a **single-container host** (Render,
+> Railway, Fly.io) — no code changes needed, `store.py` behaves as designed.
+> Deploy to Vercel when you want a shareable UI walkthrough and can accept that
+> writes do not persist. The real fix is replacing `store.py` with Django models
+> and a database.
+
+### Environment variables
+
+| Variable | Required | Notes |
+|---|---|---|
+| `DJANGO_SECRET_KEY` | **yes** | The app refuses to start when `DJANGO_DEBUG=False` and this is unset |
+| `DJANGO_DEBUG` | **yes** | `False` in deployment |
+| `DJANGO_ALLOWED_HOSTS` | **yes** | Comma-separated, e.g. `.vercel.app,portal.example.com` |
+| `CSRF_TRUSTED_ORIGINS` | **yes** | Scheme-qualified, e.g. `https://your-app.vercel.app`. Without it every POST fails with 403 |
+| `DJANGO_SECURE_SSL_REDIRECT` | no | Defaults to `True` when not in debug |
+| `DJANGO_HSTS_SECONDS` | no | Defaults to one year |
+| `ENABLE_DEV_TOOLS` | no | Defaults to `DEBUG`. Gates the unauthenticated `/dev/reset-store/` route |
+
+Generate a key with:
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
+```
+
+Locally none of these are needed — every one falls back to a development
+default, so `manage.py runserver` still works with no setup.
+
+### Build
+
+```bash
+pip install -r requirements.txt
+python manage.py collectstatic --noinput
+```
+
+There is **no `migrate` step** — the project defines no models and uses
+signed-cookie sessions, so it needs no database.
+
+`vercel.json` routes `/static/*` to the collected output and everything else to
+`spectrum_portal/wsgi.py`, which exposes `app` for the `@vercel/python` runtime.
+Static files are served by **WhiteNoise** with hashed filenames, gzip and
+immutable cache headers, because Vercel's Python runtime will not serve them.
+
+### What is deliberately not routed
+
+* **`/admin/`** — `django.contrib.admin` is installed but unrouted; with no
+  models and no migrations it would 500 on any request.
+* **`/dev/reset-store/`** — unauthenticated and destructive, so it only exists
+  when `ENABLE_DEV_TOOLS` is on.
+
 ## About the mock data
 
 Every figure in the portal is either **seeded ground truth** or **derived from

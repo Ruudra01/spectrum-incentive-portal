@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.urls import path
 
 from . import views
@@ -23,5 +24,10 @@ urlpatterns = [
     path("director/approvals/", views.director_approvals, name="director_approvals"),
 
     path("api/chat/", views.chat_api, name="chat_api"),
-    path("dev/reset-store/", views.dev_reset_store, name="dev_reset_store"),
 ]
+
+# Unauthenticated and destructive — never routed in a deployed environment.
+if settings.ENABLE_DEV_TOOLS:
+    urlpatterns.append(
+        path("dev/reset-store/", views.dev_reset_store, name="dev_reset_store")
+    )

@@ -15,10 +15,10 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
-from django.contrib import admin
 from django.urls import include, path
 
+# django.contrib.admin is intentionally NOT routed: this project defines no
+# models and applies no migrations, so the admin would 500 on any request.
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("", include("dashboard.urls")),
 ]

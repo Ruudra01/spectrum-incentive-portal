@@ -10,22 +10,64 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
+# ---------------------------------------------------------------------------
+# Environment-driven configuration.
+# Locally everything falls back to development defaults, so `runserver` needs
+# no setup. In deployment every one of these MUST be provided.
+# ---------------------------------------------------------------------------
+def _env_flag(name, default=False):
+    return os.environ.get(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-t%bx9a)weu%5+!ojg)3nqi*p@(-^d&m&2-@lx7uxt97*#-rl3d"
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+def _env_list(name):
+    return [v.strip() for v in os.environ.get(name, "").split(",") if v.strip()]
 
-ALLOWED_HOSTS = []
+
+DEBUG = _env_flag("DJANGO_DEBUG", True)
+
+# A generated key is used only for local development. Deployment must set
+# DJANGO_SECRET_KEY; the app refuses to start with the insecure default.
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-t%bx9a)weu%5+!ojg)3nqi*p@(-^d&m&2-@lx7uxt97*#-rl3d",
+)
+if not DEBUG and SECRET_KEY.startswith("django-insecure-"):
+    raise RuntimeError(
+        "DJANGO_SECRET_KEY must be set to a real value when DJANGO_DEBUG is False."
+    )
+
+# "testserver" is what Django's test Client sends, so ad-hoc scripts work
+# locally without extra setup. Development only — never in the deployed list.
+ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS") or (
+    ["localhost", "127.0.0.1", "[::1]", "testserver"] if DEBUG else []
+)
+
+# Django requires the scheme-qualified origin for cross-origin POSTs; without
+# it every form on the deployed site fails CSRF with a 403.
+CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS")
+
+# Vercel terminates TLS upstream, so Django needs to be told the request was
+# secure or it will build http:// URLs and reject secure cookies.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = _env_flag("DJANGO_SECURE_SSL_REDIRECT", True)
+    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+# The in-memory store and the unauthenticated /dev/reset-store/ route are
+# development affordances. See store.py — they are not safe to expose.
+ENABLE_DEV_TOOLS = _env_flag("ENABLE_DEV_TOOLS", DEBUG)
 
 
 # Application definition
@@ -42,6 +84,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static files; Vercel's Python runtime does not.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -122,13 +166,23 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        # Hashed filenames + compression, served by WhiteNoise.
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    "default": {
-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
-    },
-}
+if DEBUG:
+    MAILERS = {
+        "default": {
+            "BACKEND": "django.core.mail.backends.console.EmailBackend",
+        },
+    }
