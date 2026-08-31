@@ -1912,9 +1912,20 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
   border: 1px solid var(--sp-border);
   border-radius: var(--sp-radius);
   background-color: var(--sp-white);
+  color: inherit;
+  /* These cards are anchors; without this the browser underlines the name. */
+  text-decoration: none;
   cursor: pointer;
-  transition: border-color var(--sp-ease), background-color var(--sp-ease);
+  transition: border-color var(--sp-ease), background-color var(--sp-ease), transform var(--sp-ease);
 }
+.sp-select-card:hover {
+  border-color: var(--sp-border-strong);
+  transform: translateY(-1px);
+}
+.sp-select-card,
+.sp-select-card:hover,
+.sp-select-card:focus,
+.sp-select-card:focus-visible { text-decoration: none; }
 .sp-select-card:hover { border-color: var(--sp-border-strong); }
 .sp-select-card.is-selected { border-width: 2px; border-color: var(--sp-blue); background-color: var(--sp-tint); }
 .sp-select-badge {
@@ -1950,7 +1961,32 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
   color: var(--sp-navy);
   white-space: nowrap;
 }
-.sp-compare-best { background-color: rgba(0, 94, 255, .08); }
+.sp-compare-best {
+  /* Stronger tint than the old .08 so the winner reads at a glance, with a
+     3px rule and a labelled chip. Blue only — no red/green in this grid. */
+  background-color: rgba(0, 94, 255, .16);
+  border-left: 3px solid var(--sp-blue);
+  color: var(--sp-navy);
+  font-weight: 600;
+}
+.sp-compare-value { font-variant-numeric: tabular-nums; }
+.sp-best-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .2rem;
+  margin-left: .5rem;
+  padding: .1rem .45rem;
+  border-radius: 999px;
+  background-color: var(--sp-blue);
+  color: var(--sp-white);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+/* Losing values recede via muting and weight, never via a "bad" colour. */
+.sp-compare-lesser { color: var(--sp-muted); font-weight: 400; }
 .sp-compare-caret { display: inline-block; margin-right: .3rem; color: var(--sp-blue); }
 .sp-compare-empty { color: var(--sp-muted); font-style: italic; }
 .sp-compare-prompt { padding: 3rem 1.5rem; text-align: center; color: var(--sp-muted); }
@@ -2074,4 +2110,145 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
   .sp-program-table thead th,
   .sp-program-table tbody td { padding: .8rem .9rem; }
   .sp-program-table tbody td:first-child { min-width: 160px; }
+}
+
+
+/* Sign in sits in the navbar beside the hero's primary CTA, so it is scaled
+   down — but never below a 40px tap target. */
+.sp-signin {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: .4rem 1.15rem;
+  font-size: var(--sp-fs-3);
+}
+
+/* Numbered section headers in the program authoring form. */
+.sp-section-legend {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  float: none;
+  width: auto;
+  margin-bottom: 1.25rem;
+  padding: 0;
+  font-size: var(--sp-fs-4);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--sp-navy);
+}
+.sp-section-num {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background-color: var(--sp-navy);
+  color: var(--sp-white);
+  font-size: var(--sp-fs-4);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Edit-entry modal — Bootstrap's modal shell, Spectrum's surface. */
+.sp-edit-modal {
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-radius);
+  background-color: var(--sp-white);
+}
+.sp-edit-modal .modal-header,
+.sp-edit-modal .modal-footer {
+  border-color: var(--sp-border);
+  padding: 1rem 1.25rem;
+}
+.sp-edit-modal .modal-body { padding: 1.25rem; }
+.sp-edit-modal-title { font-size: var(--sp-fs-2); font-weight: 600; color: var(--sp-navy); }
+.sp-modal-close {
+  width: 30px; height: 30px; padding: 5px;
+  border: 0; border-radius: 6px;
+  background: none; color: var(--sp-muted);
+  cursor: pointer;
+  transition: background-color var(--sp-ease), color var(--sp-ease);
+}
+.sp-modal-close:hover { background-color: var(--sp-bg); color: var(--sp-navy); }
+.sp-modal-close svg { width: 100%; height: 100%; }
+.sp-edit-modal .sp-preview { margin-top: 1rem; }
+
+/* ===============================================================
+   Landing: dashboard preview, scale strip, answers card
+   =============================================================== */
+.sp-preview-frame {
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-radius);
+  background-color: var(--sp-bg);
+  overflow: hidden;
+}
+.sp-preview-bar {
+  display: flex;
+  gap: .35rem;
+  padding: .6rem .8rem;
+  border-bottom: 1px solid var(--sp-border);
+  background-color: var(--sp-white);
+}
+.sp-preview-bar span {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background-color: var(--sp-border-strong);
+}
+.sp-preview-body { padding: .9rem; }
+.sp-preview-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .45rem 0;
+  border-bottom: 1px solid var(--sp-border);
+  font-size: var(--sp-fs-4);
+}
+.sp-preview-row:last-child { border-bottom: 0; }
+.sp-preview-rank {
+  flex: 0 0 20px;
+  color: var(--sp-muted);
+  font-variant-numeric: tabular-nums;
+}
+.sp-preview-agent { color: var(--sp-navy); font-weight: 500; }
+.sp-preview-pts { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--sp-muted); }
+
+.sp-scale {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 1.75rem 1rem;
+  border-top: 1px solid var(--sp-border);
+  border-bottom: 1px solid var(--sp-border);
+  text-align: center;
+}
+.sp-scale-value {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -.02em;
+  color: var(--sp-navy);
+  font-variant-numeric: tabular-nums;
+}
+.sp-scale-label {
+  margin-top: .4rem;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--sp-muted);
+}
+
+.sp-answers { display: flex; align-items: flex-start; gap: 1rem; }
+.sp-answers-icon { flex: 0 0 24px; width: 24px; height: 24px; margin-top: .2rem; color: var(--sp-blue); }
+.sp-answers-cta { flex: 0 0 auto; margin-left: auto; align-self: center; }
+
+@media (max-width: 767.98px) {
+  .sp-scale { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem 1rem; }
+}
+@media (max-width: 575.98px) {
+  .sp-answers { flex-direction: column; }
+  .sp-answers-cta { margin-left: 0; align-self: stretch; text-align: center; }
 }

@@ -92,12 +92,16 @@
               {% for cell in row.cells %}
               {% if cell.is_best %}
               <td class="sp-compare-best">
-                <span class="sp-compare-caret" aria-label="Most favourable value">{% if row.better == "low" %}&#9662;{% else %}&#9652;{% endif %}</span>{{ cell.display }}
+                <span class="sp-compare-value">{{ cell.display }}</span>
+                <span class="sp-best-chip">
+                  <span aria-hidden="true">{% if row.better == "low" %}&#9662;{% else %}&#9652;{% endif %}</span>Best
+                </span>
               </td>
               {% elif cell.missing %}
               <td class="sp-compare-empty">Not specified</td>
               {% else %}
-              <td>{{ cell.display }}</td>
+              {# Losing values are muted, never coloured as "bad". #}
+              <td{% if row.better != "none" %} class="sp-compare-lesser"{% endif %}>{{ cell.display }}</td>
               {% endif %}
               {% endfor %}
             </tr>

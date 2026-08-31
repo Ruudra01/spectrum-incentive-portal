@@ -145,6 +145,90 @@
   </div>
 </section>
 
+{# 2b. Product preview — a lightweight recreation, not a screenshot #}
+<section class="sp-section">
+  <div class="container">
+    <div class="row g-4 align-items-center">
+      <div class="col-lg-5 u-reveal">
+        <p class="sp-eyebrow">Inside the portal</p>
+        <h1 class="mt-2 mb-3">See your standing the moment you sign in.</h1>
+        <p class="sp-lede mb-0">
+          Your points, your tier, and where you sit on the board — no spreadsheets,
+          no waiting for a monthly email.
+        </p>
+      </div>
+
+      <div class="col-lg-7 u-reveal">
+        <div class="sp-preview-frame" aria-label="Preview of the agent dashboard">
+          <div class="sp-preview-bar" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="sp-preview-body">
+            <div class="sp-card p-3">
+              <p class="sp-kpi-label mb-1">Points balance</p>
+              <p class="sp-balance mb-2">{{ preview_agent.points }}</p>
+              <span class="sp-tier sp-tier-{{ preview_tier.slug }}">{{ preview_tier.name }}</span>
+              {% if next_tier %}
+              <div class="sp-progress mt-3" style="--tier-color: var(--tier-{{ preview_tier.slug }});">
+                <div class="sp-progress-fill" style="width: {{ next_tier.percent }}%"></div>
+              </div>
+              <p class="sp-muted sp-small mb-0 mt-2">{{ next_tier.needed }} points to {{ next_tier.name }}</p>
+              {% endif %}
+            </div>
+
+            <div class="sp-card p-3 mt-2">
+              <p class="sp-kpi-label mb-2">Leaderboard</p>
+              {% for row in preview_rows %}
+              <div class="sp-preview-row">
+                <span class="sp-preview-rank">{{ row.rank }}</span>
+                <span class="sp-preview-agent">{{ row.name }}</span>
+                <span class="sp-tier sp-tier-{{ row.tier.slug }}">{{ row.tier.name }}</span>
+                <span class="sp-preview-pts">{{ row.points }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <p class="sp-muted sp-small text-center mt-2 mb-0">A preview of the agent dashboard.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# 2c. Scale — real figures from the org data #}
+<section class="sp-section">
+  <div class="container">
+    <div class="sp-scale u-reveal">
+      {% for stat in scale_stats %}
+      <div class="sp-scale-item">
+        <p class="sp-scale-value mb-0" data-count="{{ stat.value }}">0</p>
+        <p class="sp-scale-label mb-0">{{ stat.label }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{# 2d. Answers are available before you sign in #}
+<section class="sp-section">
+  <div class="container">
+    <div class="sp-card sp-answers u-reveal p-4">
+      <svg class="sp-answers-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-3.6-.7L3 21l1.9-4.9A8.2 8.2 0 0 1 4 11.5a8.4 8.4 0 0 1 9-8.4 8.4 8.4 0 0 1 8 8.4z"/>
+      </svg>
+      <div>
+        <h2 class="mb-1">Questions answered up front</h2>
+        <p class="sp-muted mb-0">
+          How points are calculated, when payouts land, what counts as a qualified upsell —
+          the Policy Assistant answers these any time, and the FAQs are open before you sign in.
+        </p>
+      </div>
+      <a class="btn-sp-secondary sp-answers-cta" href="{% url 'dashboard:faqs' %}">Read the FAQs</a>
+    </div>
+  </div>
+</section>
+
 {# 3. Interactive tier explorer #}
 <section class="sp-section" id="tier-explorer">
   <div class="container">

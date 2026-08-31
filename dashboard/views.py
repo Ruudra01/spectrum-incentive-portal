@@ -51,6 +51,21 @@ def landing(request):
             "kpi_stats": mock_data.KPI_STATS,
             "weekly_points": mock_data.WEEKLY_POINTS,
             "headline_stat": mock_data.HEADLINE_STAT,
+            # Scale figures for the landing page — all real values already in
+            # mock_data, nothing invented for marketing copy.
+            "scale_stats": [
+                {"value": mock_data.TERRITORY["technicians"], "label": "Field technicians"},
+                {"value": len(mock_data.ORG["managers"]), "label": "Teams"},
+                {"value": mock_data.DIRECTOR_PROFILE["warehouses"], "label": "Warehouses"},
+                {"value": len(mock_data.TIERS), "label": "Reward tiers"},
+            ],
+            # Top of the real board, for the dashboard preview mockup.
+            "preview_rows": [
+                dict(row, tier=mock_data.get_tier(row["points"]))
+                for row in mock_data.LEADERBOARD[:3]
+            ],
+            "preview_agent": agent,
+            "preview_tier": mock_data.get_tier(agent["points"]),
         },
     )
 
@@ -400,8 +415,9 @@ def log_work(request):
             return redirect(f"{back}&error=job")
 
         if action == "update":
-            store.update_entry(_int(request.POST.get("entry_id")), agent["id"], **fields)
-            return redirect(f"{back}&saved=1")
+            entry_id = _int(request.POST.get("entry_id"))
+            store.update_entry(entry_id, agent["id"], **fields)
+            return redirect(f"{back}&updated={entry_id}")
 
         # Points are computed in the store, never taken from the form.
         store.add_entry(
@@ -452,6 +468,7 @@ def log_work(request):
         }),
         "manager_name": mock_data.MANAGER_PROFILE["name"],
         "saved": request.GET.get("saved") == "1",
+        "updated_id": _int(request.GET.get("updated")) or None,
         "deleted": request.GET.get("deleted") == "1",
         "submitted_count": _int(request.GET.get("submitted")),
     })
@@ -700,6 +717,7 @@ def manager_programs(request):
         "point_value": mock_data.POINT_VALUE_USD,
         "editable_statuses": list(store.EDITABLE_PROGRAM_STATUSES),
         "saved": request.GET.get("saved") == "1",
+        "updated_id": _int(request.GET.get("updated")) or None,
         "submitted": request.GET.get("submitted") == "1",
         "date_error": request.GET.get("error") == "dates",
     })

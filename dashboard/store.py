@@ -206,6 +206,20 @@ def _seed_work_logs():
                                    modifiers, minutes, rng.choice(_STREETS),
                                    status, ref, note))
 
+    # The random draws above make the queue size depend on the weekday, so on
+    # some days the manager's review queue seeded nearly empty. Guarantee each
+    # of the other agents leaves exactly one submission awaiting review.
+    for agent_id, agent_name in _SEEDED_AGENTS:
+        if agent_id == 417:
+            continue
+        theirs = [l for l in logs if l["agent_id"] == agent_id]
+        if any(l["status"] == STATUS_SUBMITTED for l in theirs) or not theirs:
+            continue
+        latest = max(theirs, key=lambda l: l["date"])
+        latest["status"] = STATUS_SUBMITTED
+        latest["reviewed_at"] = None
+        latest["reviewer_id"] = None
+
     # Dana's specific review outcomes, so the UI shows every state.
     ref += 1
     logs.append(_entry(counter, 417, "Dana Whitfield", today - timedelta(days=12),

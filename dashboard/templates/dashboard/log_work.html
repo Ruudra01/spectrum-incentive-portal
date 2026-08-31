@@ -56,7 +56,7 @@
         {% endif %}
 
         {% for entry in entries %}
-        <div class="sp-card sp-entry" id="entry-{{ entry.id }}">
+        <div class="sp-card sp-entry{% if entry.id == updated_id %} is-new{% endif %}" id="entry-{{ entry.id }}">
           <div class="sp-entry-top">
             <div>
               <p class="sp-entry-title">{{ entry.job.label }}</p>
@@ -90,6 +90,7 @@
           {% if entry.editable %}
           <div class="sp-entry-actions">
             <button type="button" class="btn-sp-secondary sp-btn-sm sp-edit-entry"
+                    data-bs-toggle="modal" data-bs-target="#spEditModal"
                     data-entry="{{ entry.id }}"
                     data-job="{{ entry.job_type }}"
                     data-ref="{{ entry.work_order_ref }}"
@@ -144,108 +145,11 @@
             <input type="hidden" name="entry_id" value="" id="spEntryId">
             <input type="hidden" name="date" value="{{ on_date }}">
 
-            <div class="sp-field">
-              <label class="sp-label" for="spJobType">Job type</label>
-              <select class="sp-control" id="spJobType" name="job_type" required>
-                <option value="">Choose a job type</option>
-                {% for group in job_groups %}
-                <optgroup label="{{ group.name }}">
-                  {% for job in group.jobs %}
-                  <option value="{{ job.code }}">{{ job.label }}</option>
-                  {% endfor %}
-                </optgroup>
-                {% endfor %}
-              </select>
-              <p class="sp-muted sp-small mb-0 mt-1" id="spJobHint"></p>
-              <p class="sp-field-error" id="spJobError" hidden></p>
-            </div>
-
-            <div class="sp-field">
-              <label class="sp-label" for="spRef">Work order</label>
-              <input class="sp-control" type="text" id="spRef" name="work_order_ref"
-                     placeholder="WO-2026-0148" required>
-              <p class="sp-field-error" id="spRefError" hidden></p>
-            </div>
-
-            <div class="sp-field">
-              <label class="sp-label" for="spAddress">Address</label>
-              <input class="sp-control" type="text" id="spAddress" name="address_line"
-                     placeholder="Street and city" required>
-              <p class="sp-field-error" id="spAddressError" hidden></p>
-            </div>
-
-            <div class="sp-field">
-              <label class="sp-label" for="spDuration">Duration (minutes)</label>
-              <div class="d-flex gap-2">
-                <input class="sp-control" type="number" id="spDuration" name="duration_minutes"
-                       min="1" max="1440" step="1" required>
-                <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="15">+15</button>
-                <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="30">+30</button>
-              </div>
-              <p class="sp-field-error" id="spDurationError" hidden></p>
-            </div>
-
-            <div class="sp-field">
-              <span class="sp-label">Modifiers</span>
-              <div class="sp-mods">
-                {% for mod in modifiers %}
-                <label class="sp-mod" title="{{ mod.description }}">
-                  <input type="checkbox" name="modifiers" value="{{ mod.code }}"
-                         data-multiplier="{{ mod.multiplier }}">
-                  <span class="sp-mod-body">
-                    {% if mod.code == 'adverse_weather' %}
-                    <svg class="sp-mod-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         stroke-width="2" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z"/>
-                    </svg>
-                    {% endif %}
-                    {{ mod.label }}
-                    <span class="sp-mod-effect">+{{ mod.multiplier|floatformat:0 }}0%</span>
-                  </span>
-                </label>
-                {% endfor %}
-              </div>
-
-              <hr class="sp-safety-divider">
-              <div class="sp-mods">
-                <label class="sp-mod sp-mod-safety" title="{{ safety_modifier.description }}">
-                  <input type="checkbox" name="modifiers" value="{{ safety_modifier.code }}"
-                         id="spSafety" data-multiplier="-1">
-                  <span class="sp-mod-body">
-                    {{ safety_modifier.label }}
-                    <span class="sp-mod-effect">&minus;100%</span>
-                  </span>
-                </label>
-              </div>
-              <div class="sp-safety-confirm" id="spSafetyConfirm" hidden>
-                This zeroes the entry's points. {{ safety_modifier.description }}
-                <div class="d-flex gap-2 mt-2">
-                  <button type="button" class="btn-sp-secondary sp-btn-sm" id="spSafetyCancel">Cancel</button>
-                  <button type="button" class="btn-sp-secondary sp-btn-sm" id="spSafetyConfirmBtn">Apply anyway</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="sp-field">
-              <label class="sp-label" for="spNotes">Notes <span class="sp-muted">(optional)</span></label>
-              <textarea class="sp-control" id="spNotes" name="notes" rows="2" maxlength="280"></textarea>
-              <p class="sp-muted sp-small mb-0 mt-1"><span id="spNotesCount">0</span>/280</p>
-            </div>
-
-            {# Live preview — recalculated from the same numbers the server uses. #}
-            <div class="sp-preview" id="spPreview" aria-live="polite">
-              <div class="sp-preview-line"><span>Base points</span><span id="spBase">0</span></div>
-              <div id="spPreviewMods"></div>
-              <div class="sp-preview-total">
-                <span class="sp-label mb-0">Total</span>
-                <span class="sp-preview-total-value" id="spTotal">0</span>
-              </div>
-            </div>
+            {% include "dashboard/partials/_entry_fields.html" with p="sp" %}
 
             <div class="d-flex flex-wrap gap-2 mt-3">
               <button type="submit" class="btn-sp-secondary" id="spSaveDraft">Save as draft</button>
               <button type="submit" class="btn-sp-primary" id="spSaveSubmit">Save &amp; submit</button>
-              <button type="button" class="btn-sp-secondary" id="spCancelEdit" hidden>Cancel edit</button>
             </div>
           </form>
         </div>
@@ -253,6 +157,35 @@
       </div>
 
 
+    </div>
+  </div>
+</div>
+
+
+{# Edit entry — same fields as the add form, via the shared partial. #}
+<div class="modal fade" id="spEditModal" tabindex="-1" aria-labelledby="spEditTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content sp-edit-modal">
+      <div class="modal-header">
+        <h2 class="modal-title sp-edit-modal-title" id="spEditTitle">Edit entry</h2>
+        <button type="button" class="sp-modal-close" data-bs-dismiss="modal" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+               stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <form method="post" id="spEditForm" novalidate>
+        <div class="modal-body">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="update">
+          <input type="hidden" name="entry_id" value="" id="edEntryId">
+          <input type="hidden" name="date" value="{{ on_date }}">
+          {% include "dashboard/partials/_entry_fields.html" with p="ed" %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-sp-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn-sp-primary">Save changes</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -282,210 +215,205 @@
 
 {% block extra_js %}
 <script>
-  /* Work log. The preview mirrors calculate_points using values handed over
-     as JSON, so the browser and the server can never drift apart. */
+  /* Work log. ONE entry-form implementation, bound to both the add form and
+     the edit modal — the preview mirrors mock_data.calculate_points from
+     values handed over as JSON, so browser and server cannot drift apart. */
   (function () {
     var CALC = JSON.parse(document.getElementById("spEntryCard").dataset.calc);
-    var form = document.getElementById("spEntryForm");
-    var jobType = document.getElementById("spJobType");
-    var jobHint = document.getElementById("spJobHint");
-    var duration = document.getElementById("spDuration");
-    var notes = document.getElementById("spNotes");
-    var notesCount = document.getElementById("spNotesCount");
-    var preview = document.getElementById("spPreview");
-    var baseEl = document.getElementById("spBase");
-    var modsEl = document.getElementById("spPreviewMods");
-    var totalEl = document.getElementById("spTotal");
-    var safety = document.getElementById("spSafety");
-    var safetyConfirm = document.getElementById("spSafetyConfirm");
-    var shownTotal = 0;
 
-    function checkedModifiers() {
-      return Array.prototype.slice
-        .call(form.querySelectorAll('input[name="modifiers"]:checked'))
-        .map(function (input) { return input.value; });
-    }
-
-    /* Same algorithm as mock_data.calculate_points: each delta off the base,
-       added; Math.round matches Python's floor(x + 0.5). */
+    /* Same algorithm as calculate_points: each delta off the base, added.
+       Math.round matches Python's floor(x + 0.5). */
     function computeTotal(code, modifiers) {
       var base = CALC.jobs[code];
       if (base === undefined) return { base: 0, lines: [], total: 0, zeroed: false };
       if (modifiers.indexOf(CALC.safety) > -1) {
         return { base: base, lines: [], total: 0, zeroed: true };
       }
-      var lines = [];
-      var total = base;
+      var lines = [], total = base;
       modifiers.forEach(function (m) {
         var mult = CALC.modifiers[m];
         if (mult === undefined) return;
         var delta = Math.round(base * mult);
         total += delta;
-        lines.push({ code: m, delta: delta, mult: mult });
+        lines.push({ code: m, delta: delta });
       });
       return { base: base, lines: lines, total: Math.max(total, 0), zeroed: false };
     }
 
-    var labels = {};
-    form.querySelectorAll('input[name="modifiers"]').forEach(function (input) {
-      labels[input.value] = input.parentNode.querySelector(".sp-mod-body").textContent.trim().split("+")[0].split("−")[0].trim();
-    });
+    /* Binds every behaviour of one entry form. Called twice; no duplicated logic. */
+    function bindEntryForm(form) {
+      var q = function (sel) { return form.querySelector(sel); };
+      var jobType = q('select[name="job_type"]');
+      var ref = q('input[name="work_order_ref"]');
+      var address = q('input[name="address_line"]');
+      var duration = q('input[name="duration_minutes"]');
+      var notes = q('textarea[name="notes"]');
+      var hint = q('[data-role="hint"]');
+      var notesCount = q('[data-role="notes-count"]');
+      var preview = q('[data-role="preview"]');
+      var baseEl = q('[data-role="base"]');
+      var modsEl = q('[data-role="preview-mods"]');
+      var totalEl = q('[data-role="total"]');
+      var safety = q('[data-role="safety"]');
+      var safetyConfirm = q('[data-role="safety-confirm"]');
+      var shownTotal = 0;
 
-    /* Animate the total between values rather than jumping. */
-    function setTotal(next) {
-      if (SP.reducedMotion) { totalEl.textContent = next; shownTotal = next; return; }
-      var from = shownTotal, start = null;
-      function step(now) {
-        if (start === null) start = now;
-        var p = Math.min((now - start) / 200, 1);
-        totalEl.textContent = Math.round(from + (next - from) * p);
-        if (p < 1) requestAnimationFrame(step);
-      }
-      requestAnimationFrame(step);
-      shownTotal = next;
-    }
-
-    function render() {
-      var result = computeTotal(jobType.value, checkedModifiers());
-      baseEl.textContent = result.base;
-      modsEl.innerHTML = "";
-      result.lines.forEach(function (line) {
-        var row = document.createElement("div");
-        row.className = "sp-preview-line sp-preview-mod";
-        var name = document.createElement("span");
-        name.textContent = labels[line.code] || line.code;
-        var value = document.createElement("span");
-        value.textContent = (line.delta >= 0 ? "+" : "") + line.delta;
-        row.appendChild(name); row.appendChild(value);
-        modsEl.appendChild(row);
+      var labels = {};
+      form.querySelectorAll('input[name="modifiers"]').forEach(function (input) {
+        labels[input.value] = input.parentNode.querySelector(".sp-mod-body")
+          .textContent.trim().split("+")[0].split("\u2212")[0].trim();
       });
-      if (result.zeroed) {
-        var row = document.createElement("div");
-        row.className = "sp-preview-line sp-preview-mod";
-        row.innerHTML = "<span>Safety flagged</span><span>zeroed</span>";
-        modsEl.appendChild(row);
+
+      function checkedModifiers() {
+        return Array.prototype.slice
+          .call(form.querySelectorAll('input[name="modifiers"]:checked'))
+          .map(function (i) { return i.value; });
       }
-      preview.classList.toggle("is-zeroed", result.zeroed);
-      setTotal(result.total);
-    }
 
-    jobType.addEventListener("change", function () {
-      var code = jobType.value;
-      if (CALC.jobs[code] !== undefined) {
-        jobHint.textContent = CALC.jobs[code] + " base points · about " + CALC.minutes[code] + " min";
-        if (!duration.value) duration.value = CALC.minutes[code];
-      } else {
-        jobHint.textContent = "";
+      function setTotal(next) {
+        if (SP.reducedMotion) { totalEl.textContent = next; shownTotal = next; return; }
+        var from = shownTotal, start = null;
+        function step(now) {
+          if (start === null) start = now;
+          var t = Math.min((now - start) / 200, 1);
+          totalEl.textContent = Math.round(from + (next - from) * t);
+          if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+        shownTotal = next;
       }
-      render();
-    });
 
-    form.addEventListener("change", function (e) {
-      if (e.target.name === "modifiers") render();
-    });
+      function render() {
+        var result = computeTotal(jobType.value, checkedModifiers());
+        baseEl.textContent = result.base;
+        modsEl.innerHTML = "";
+        result.lines.forEach(function (line) {
+          var row = document.createElement("div");
+          row.className = "sp-preview-line sp-preview-mod";
+          var name = document.createElement("span");
+          name.textContent = labels[line.code] || line.code;
+          var value = document.createElement("span");
+          value.textContent = (line.delta >= 0 ? "+" : "") + line.delta;
+          row.appendChild(name); row.appendChild(value);
+          modsEl.appendChild(row);
+        });
+        if (result.zeroed) {
+          var row = document.createElement("div");
+          row.className = "sp-preview-line sp-preview-mod";
+          row.innerHTML = "<span>Safety flagged</span><span>zeroed</span>";
+          modsEl.appendChild(row);
+        }
+        preview.classList.toggle("is-zeroed", result.zeroed);
+        setTotal(result.total);
+      }
 
-    /* Safety flag needs a deliberate confirmation — it zeroes the entry. */
-    safety.addEventListener("click", function (e) {
-      if (safety.checked) {
-        e.preventDefault();
-        safety.checked = false;
-        safetyConfirm.hidden = false;
-        document.getElementById("spSafetyConfirmBtn").focus();
-      } else {
+      jobType.addEventListener("change", function () {
+        var code = jobType.value;
+        if (CALC.jobs[code] !== undefined) {
+          hint.textContent = CALC.jobs[code] + " base points \u00b7 about " + CALC.minutes[code] + " min";
+          if (!duration.value) duration.value = CALC.minutes[code];
+        } else { hint.textContent = ""; }
         render();
-      }
-    });
-    document.getElementById("spSafetyConfirmBtn").addEventListener("click", function () {
-      safety.checked = true;
-      safetyConfirm.hidden = true;
-      render();
-    });
-    document.getElementById("spSafetyCancel").addEventListener("click", function () {
-      safety.checked = false;
-      safetyConfirm.hidden = true;
-      safety.focus();
-      render();
-    });
-
-    document.querySelectorAll(".sp-step").forEach(function (button) {
-      button.addEventListener("click", function () {
-        duration.value = (parseInt(duration.value || "0", 10) || 0) + parseInt(button.dataset.step, 10);
       });
-    });
+      form.addEventListener("change", function (e) {
+        if (e.target.name === "modifiers") render();
+      });
 
-    notes.addEventListener("input", function () { notesCount.textContent = notes.value.length; });
+      /* The safety flag zeroes the entry, so it needs a deliberate confirm. */
+      safety.addEventListener("click", function (e) {
+        if (safety.checked) {
+          e.preventDefault();
+          safety.checked = false;
+          safetyConfirm.hidden = false;
+          q('[data-role="safety-ok"]').focus();
+        } else { render(); }
+      });
+      q('[data-role="safety-ok"]').addEventListener("click", function () {
+        safety.checked = true; safetyConfirm.hidden = true; render();
+      });
+      q('[data-role="safety-cancel"]').addEventListener("click", function () {
+        safety.checked = false; safetyConfirm.hidden = true; safety.focus(); render();
+      });
 
-    /* --- inline validation --- */
-    function setError(input, id, message) {
-      var node = document.getElementById(id);
-      if (message) {
-        node.textContent = message; node.hidden = false;
-        input.classList.add("is-invalid"); input.setAttribute("aria-invalid", "true");
-      } else {
-        node.hidden = true; input.classList.remove("is-invalid"); input.removeAttribute("aria-invalid");
+      form.querySelectorAll(".sp-step").forEach(function (button) {
+        button.addEventListener("click", function () {
+          duration.value = (parseInt(duration.value || "0", 10) || 0) + parseInt(button.dataset.step, 10);
+        });
+      });
+
+      notes.addEventListener("input", function () { notesCount.textContent = notes.value.length; });
+
+      function setError(input, name, message) {
+        var node = form.querySelector('[data-error="' + name + '"]');
+        if (message) {
+          node.textContent = message; node.hidden = false;
+          input.classList.add("is-invalid"); input.setAttribute("aria-invalid", "true");
+        } else {
+          node.hidden = true; input.classList.remove("is-invalid"); input.removeAttribute("aria-invalid");
+        }
+        return !message;
       }
-      return !message;
-    }
-    function validate() {
-      var ok = setError(jobType, "spJobError", jobType.value ? "" : "Choose a job type.");
-      var ref = document.getElementById("spRef");
-      ok = setError(ref, "spRefError",
-        !ref.value.trim() ? "Enter the work order reference."
-          : (/^WO-\d{4}-\d{3,4}$/i.test(ref.value.trim()) ? "" : "Use the format WO-2026-0148.")) && ok;
-      var address = document.getElementById("spAddress");
-      ok = setError(address, "spAddressError", address.value.trim() ? "" : "Enter the street and city.") && ok;
-      var minutes = parseInt(duration.value, 10);
-      ok = setError(duration, "spDurationError",
-        (minutes > 0 && minutes <= 1440) ? "" : "Enter the duration in minutes.") && ok;
-      return ok;
-    }
 
-    var action = document.getElementById("spAction");
-    document.getElementById("spSaveDraft").addEventListener("click", function () {
-      if (action.value !== "update") action.value = "add";
-    });
-    document.getElementById("spSaveSubmit").addEventListener("click", function () {
-      if (action.value !== "update") action.value = "add_submit";
-    });
-    form.addEventListener("submit", function (e) {
-      if (!validate()) {
-        e.preventDefault();
-        form.querySelector(".is-invalid").focus();
+      function validate() {
+        var ok = setError(jobType, "job_type", jobType.value ? "" : "Choose a job type.");
+        ok = setError(ref, "work_order_ref",
+          !ref.value.trim() ? "Enter the work order reference."
+            : (/^WO-\d{4}-\d{3,4}$/i.test(ref.value.trim()) ? "" : "Use the format WO-2026-0148.")) && ok;
+        ok = setError(address, "address_line", address.value.trim() ? "" : "Enter the street and city.") && ok;
+        var minutes = parseInt(duration.value, 10);
+        ok = setError(duration, "duration_minutes",
+          (minutes > 0 && minutes <= 1440) ? "" : "Enter the duration in minutes.") && ok;
+        return ok;
       }
-    });
 
-    /* --- editing an existing draft --- */
-    var entryId = document.getElementById("spEntryId");
-    var cancelEdit = document.getElementById("spCancelEdit");
-    document.querySelectorAll(".sp-edit-entry").forEach(function (button) {
-      button.addEventListener("click", function () {
-        var d = button.dataset;
-        jobType.value = d.job;
-        document.getElementById("spRef").value = d.ref;
-        document.getElementById("spAddress").value = d.address;
-        duration.value = d.duration;
-        notes.value = d.notes;
+      form.addEventListener("submit", function (e) {
+        if (!validate()) {
+          e.preventDefault();
+          form.querySelector(".is-invalid").focus();
+        }
+      });
+
+      function fill(data) {
+        jobType.value = data.job || "";
+        ref.value = data.ref || "";
+        address.value = data.address || "";
+        duration.value = data.duration || "";
+        notes.value = data.notes || "";
         notesCount.textContent = notes.value.length;
-        var active = d.modifiers ? d.modifiers.split(",") : [];
+        var active = data.modifiers ? data.modifiers.split(",") : [];
         form.querySelectorAll('input[name="modifiers"]').forEach(function (input) {
           input.checked = active.indexOf(input.value) > -1;
         });
-        entryId.value = d.entry;
-        action.value = "update";
-        document.getElementById("spFormTitle").textContent = "Edit entry";
-        cancelEdit.hidden = false;
+        safetyConfirm.hidden = true;
+        shownTotal = 0;
         jobType.dispatchEvent(new Event("change"));
-        document.getElementById("spEntryCard").scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    });
-    cancelEdit.addEventListener("click", function () {
-      form.reset();
-      entryId.value = "";
-      action.value = "add";
-      document.getElementById("spFormTitle").textContent = "Add an entry";
-      cancelEdit.hidden = true;
-      notesCount.textContent = "0";
+      }
+
       render();
+      return { render: render, fill: fill, validate: validate };
+    }
+
+    var addForm = bindEntryForm(document.getElementById("spEntryForm"));
+    var editForm = bindEntryForm(document.getElementById("spEditForm"));
+
+    /* Add-entry: which button was pressed decides draft vs submit. */
+    var action = document.getElementById("spAction");
+    document.getElementById("spSaveDraft").addEventListener("click", function () { action.value = "add"; });
+    document.getElementById("spSaveSubmit").addEventListener("click", function () { action.value = "add_submit"; });
+
+    /* Edit modal: Bootstrap handles the backdrop, focus trap, Escape and
+       scroll lock; we only prefill and restore focus. */
+    var modalEl = document.getElementById("spEditModal");
+    var lastTrigger = null;
+    modalEl.addEventListener("show.bs.modal", function (event) {
+      var button = event.relatedTarget;
+      if (!button) return;
+      lastTrigger = button;
+      document.getElementById("edEntryId").value = button.dataset.entry;
+      editForm.fill(button.dataset);
+    });
+    modalEl.addEventListener("hidden.bs.modal", function () {
+      if (lastTrigger) lastTrigger.focus();
     });
 
     /* --- delete confirmation, inline rather than confirm() --- */
@@ -504,16 +432,16 @@
     var scrim = document.getElementById("spSubmitScrim");
     var openBtn = document.getElementById("spOpenSubmit");
     if (openBtn) {
+      var closeModal = function () {
+        scrim.classList.remove("is-open");
+        setTimeout(function () { scrim.hidden = true; }, 180);
+        openBtn.focus();
+      };
       openBtn.addEventListener("click", function () {
         scrim.hidden = false;
         requestAnimationFrame(function () { scrim.classList.add("is-open"); });
         document.getElementById("spCloseSubmit").focus();
       });
-      function closeModal() {
-        scrim.classList.remove("is-open");
-        setTimeout(function () { scrim.hidden = true; }, 180);
-        openBtn.focus();
-      }
       document.getElementById("spCloseSubmit").addEventListener("click", closeModal);
       scrim.addEventListener("click", function (e) { if (e.target === scrim) closeModal(); });
       document.addEventListener("keydown", function (e) {
@@ -522,12 +450,15 @@
     }
 
     var focusForm = document.getElementById("spFocusForm");
-    if (focusForm) focusForm.addEventListener("click", function () { jobType.focus(); });
-
-    render();
+    if (focusForm) {
+      focusForm.addEventListener("click", function () {
+        document.querySelector('#spEntryForm select[name="job_type"]').focus();
+      });
+    }
   })();
 
   {% if saved %}SP.toast("Entry saved.");{% endif %}
+  {% if updated_id %}SP.toast("Entry updated.");{% endif %}
   {% if deleted %}SP.toast("Entry deleted.");{% endif %}
   {% if submitted_count %}SP.toast("Sent to {{ manager_name }} for approval.");{% endif %}
 </script>

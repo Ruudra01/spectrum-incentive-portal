@@ -1,0 +1,102 @@
+{% comment %}
+Work-log entry fields, shared by the Add-entry form and the Edit modal.
+`p` is an id prefix ("sp" for add, "ed" for edit) so both can live on the page
+at once. One markup source, and one JS implementation binds against it.
+{% endcomment %}
+<div class="sp-field">
+  <label class="sp-label" for="{{ p }}JobType">Job type</label>
+  <select class="sp-control" id="{{ p }}JobType" name="job_type" required>
+    <option value="">Choose a job type</option>
+    {% for group in job_groups %}
+    <optgroup label="{{ group.name }}">
+      {% for job in group.jobs %}
+      <option value="{{ job.code }}">{{ job.label }}</option>
+      {% endfor %}
+    </optgroup>
+    {% endfor %}
+  </select>
+  <p class="sp-muted sp-small mb-0 mt-1" data-role="hint"></p>
+  <p class="sp-field-error" data-error="job_type" hidden></p>
+</div>
+
+<div class="sp-field">
+  <label class="sp-label" for="{{ p }}Ref">Work order</label>
+  <input class="sp-control" type="text" id="{{ p }}Ref" name="work_order_ref"
+         placeholder="WO-2026-0148" required>
+  <p class="sp-field-error" data-error="work_order_ref" hidden></p>
+</div>
+
+<div class="sp-field">
+  <label class="sp-label" for="{{ p }}Address">Address</label>
+  <input class="sp-control" type="text" id="{{ p }}Address" name="address_line"
+         placeholder="Street and city" required>
+  <p class="sp-field-error" data-error="address_line" hidden></p>
+</div>
+
+<div class="sp-field">
+  <label class="sp-label" for="{{ p }}Duration">Duration (minutes)</label>
+  <div class="d-flex gap-2">
+    <input class="sp-control" type="number" id="{{ p }}Duration" name="duration_minutes"
+           min="1" max="1440" step="1" required>
+    <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="15">+15</button>
+    <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="30">+30</button>
+  </div>
+  <p class="sp-field-error" data-error="duration_minutes" hidden></p>
+</div>
+
+<div class="sp-field">
+  <span class="sp-label">Modifiers</span>
+  <div class="sp-mods">
+    {% for mod in modifiers %}
+    <label class="sp-mod" title="{{ mod.description }}">
+      <input type="checkbox" name="modifiers" value="{{ mod.code }}"
+             data-multiplier="{{ mod.multiplier }}">
+      <span class="sp-mod-body">
+        {% if mod.code == 'adverse_weather' %}
+        <svg class="sp-mod-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z"/>
+        </svg>
+        {% endif %}
+        {{ mod.label }}
+        <span class="sp-mod-effect">+{{ mod.multiplier|floatformat:0 }}0%</span>
+      </span>
+    </label>
+    {% endfor %}
+  </div>
+
+  <hr class="sp-safety-divider">
+  <div class="sp-mods">
+    <label class="sp-mod sp-mod-safety" title="{{ safety_modifier.description }}">
+      <input type="checkbox" name="modifiers" value="{{ safety_modifier.code }}"
+             data-role="safety" data-multiplier="-1">
+      <span class="sp-mod-body">
+        {{ safety_modifier.label }}
+        <span class="sp-mod-effect">&minus;100%</span>
+      </span>
+    </label>
+  </div>
+  <div class="sp-safety-confirm" data-role="safety-confirm" hidden>
+    This zeroes the entry's points. {{ safety_modifier.description }}
+    <div class="d-flex gap-2 mt-2">
+      <button type="button" class="btn-sp-secondary sp-btn-sm" data-role="safety-cancel">Cancel</button>
+      <button type="button" class="btn-sp-secondary sp-btn-sm" data-role="safety-ok">Apply anyway</button>
+    </div>
+  </div>
+</div>
+
+<div class="sp-field">
+  <label class="sp-label" for="{{ p }}Notes">Notes <span class="sp-muted">(optional)</span></label>
+  <textarea class="sp-control" id="{{ p }}Notes" name="notes" rows="2" maxlength="280"></textarea>
+  <p class="sp-muted sp-small mb-0 mt-1"><span data-role="notes-count">0</span>/280</p>
+</div>
+
+{# Live preview — recalculated from the same numbers the server uses. #}
+<div class="sp-preview" data-role="preview" aria-live="polite">
+  <div class="sp-preview-line"><span>Base points</span><span data-role="base">0</span></div>
+  <div data-role="preview-mods"></div>
+  <div class="sp-preview-total">
+    <span class="sp-label mb-0">Total</span>
+    <span class="sp-preview-total-value" data-role="total">0</span>
+  </div>
+</div>
