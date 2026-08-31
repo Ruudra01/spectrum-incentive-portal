@@ -21,10 +21,44 @@
                                  positive earnings signal that must read
                                  differently from the neutral KPI tiles. */
 
-  /* Tier metallics */
-  --tier-bronze: #B0703C;     --tier-bronze-bg: #FBF1E9;
-  --tier-silver: #7A8794;     --tier-silver-bg: #F2F4F7;
-  --tier-gold:   #C8992A;     --tier-gold-bg:   #FDF6E3;
+  /* ------------------------------------------------------------------
+     TIER COLOURS — derived, not picked.
+
+     The previous literal metallics (#B0703C / #7A8794 / #C8992A) read as
+     imported from another product beside the Spectrum blue, and all three
+     FAILED contrast on white (4.02 / 3.67 / 2.61 against a 4.5 minimum).
+     These are derived instead, under fixed rules:
+
+       * One lightness band. All three solids sit at HSL L 34% — spread of
+         zero — which is what makes them read as one family. Saturation is
+         held between 28% and 48%.
+       * Warm tones cool-shifted. Bronze rotates to hue 18 and gold to 47,
+         both desaturated: a dustier bronze and a brass-leaning gold sit
+         better beside #005EFF than copper and yellow-gold do, while still
+         reading as their metal.
+       * Silver is a chosen colour, not an absence of one. A cool blue-grey
+         at hue 224, held dE 17.4 from --sp-muted so a Silver badge is never
+         mistaken for disabled text, and dE 73.2 from --sp-blue so it is
+         never mistaken for a primary UI element.
+       * Ascending visual weight. Chroma climbs silver 23.0 -> bronze 32.7
+         -> gold 37.9, so the hierarchy is legible before the label is read.
+       * Contrast, measured, against white / against own tint:
+             bronze 7.42:1 / 6.62:1
+             silver 8.56:1 / 7.68:1
+             gold   5.00:1 / 4.67:1
+         All clear 4.5:1 on both. The band sits at L 34% rather than the
+         42-52% first targeted because gold cannot reach 4.5:1 on white up
+         there; the solids were darkened rather than the tints lightened,
+         so the tints stay subtle (all at L 95.5%).
+
+     The 1px/2px/3px border-weight progression on the badges STAYS. With the
+     three hues now in a tighter lightness band they are closer together by
+     design, so that non-colour cue matters more, not less — it is what keeps
+     the hierarchy readable in greyscale and for colourblind users.
+     ------------------------------------------------------------------ */
+  --tier-bronze: #7F472F;     --tier-bronze-bg: #F9F1EE;
+  --tier-silver: #3E4B6F;     --tier-silver-bg: #F0F2F7;
+  --tier-gold:   #806E2D;     --tier-gold-bg:   #F9F7EE;
 
   /* Spectrum Sans is proprietary; Inter stands in so the licensed font
      later drops in by name alone. */

@@ -270,10 +270,22 @@ Two hues carry the entire product: one Spectrum blue and a neutral ramp.
 | `--sp-warning` | `#B25E09` | changes-requested and the safety flag |
 | `--sp-earned` | `#1E7E34` | the single green — the live earnings tile only |
 
-**Tier metallics** — bronze `#B0703C`, silver `#7A8794`, gold `#C8992A`, each with
-a tinted background — are the only additional hues, which is what keeps them
-meaningful. Tier badges pair the metallic with a 1px/2px/3px border-weight
-progression so rank survives greyscale and works for colourblind readers.
+**Tier colours** are the only additional hues, and they are derived rather than
+picked — all three sit at one lightness (HSL L 34%) with chroma ascending, so
+they read as one family with a legible hierarchy:
+
+| Tier | Solid | Tint | vs white | vs own tint |
+|---|---|---|---|---|
+| Bronze | `#7F472F` | `#F9F1EE` | 7.42:1 | 6.62:1 |
+| Silver | `#3E4B6F` | `#F0F2F7` | 8.56:1 | 7.68:1 |
+| Gold | `#806E2D` | `#F9F7EE` | 5.00:1 | 4.67:1 |
+
+The warm tones are cool-shifted and desaturated so they sit beside `#005EFF`
+without looking imported; silver is held a measured distance from `--sp-muted`
+so a badge never reads as disabled text, and far from `--sp-blue` so it never
+reads as a primary element. Badges pair the colour with a 1px/2px/3px
+border-weight progression, which matters more now the hues sit closer together —
+it keeps rank readable in greyscale and for colourblind readers.
 
 Deltas use ▲/▼ glyphs and font weight, never red and green. Buttons are fully
 rounded pills; cards, panels, inputs and modals share a 16px radius.

@@ -24,7 +24,10 @@
     })(performance.now());
   }
 
-  /* Reveals .u-reveal elements on entry, staggered by their order on screen. */
+  /* Reveals .u-reveal elements on entry, staggered by their order on screen,
+     and counts up anything carrying data-count. The two are observed together
+     but are independent: a count-up does not need to be a reveal, which is why
+     init() below watches both selectors. */
   var observer = new IntersectionObserver(function (entries) {
     entries.forEach(function (entry, i) {
       if (!entry.isIntersecting) return;
@@ -59,7 +62,12 @@
   }
 
   function init() {
-    document.querySelectorAll(".u-reveal").forEach(function (el) { observer.observe(el); });
+    /* [data-count] is observed in its own right. Requiring .u-reveal as well
+       left every KPI figure outside the landing page showing its literal "0"
+       fallback, because only that one element happened to carry both. */
+    document.querySelectorAll(".u-reveal, [data-count]").forEach(function (el) {
+      observer.observe(el);
+    });
   }
 
   window.SP = {
