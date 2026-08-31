@@ -37,8 +37,12 @@ def _sparkline(values, width=260, height=64, pad=8):
 
 
 def landing(request):
-    """Marketing landing page. All figures come from mock_data."""
+    """Public marketing page. Every figure here is aggregate — nothing on this
+    page may present one agent's balance, rank or tier as the visitor's own."""
     agent = mock_data.CURRENT_AGENT
+    _avg_points = round(
+        sum(a["points"] for a in mock_data.LEADERBOARD) / len(mock_data.LEADERBOARD)
+    )
     return render(
         request,
         "dashboard/landing.html",
@@ -51,6 +55,31 @@ def landing(request):
             "kpi_stats": mock_data.KPI_STATS,
             "weekly_points": mock_data.WEEKLY_POINTS,
             "headline_stat": mock_data.HEADLINE_STAT,
+            # The landing page is PUBLIC. Everything below describes the
+            # programme in aggregate — no signed-out visitor should be shown
+            # one agent's balance, rank or tier as if it were their own.
+            "roster": {
+                "count": len(mock_data.LEADERBOARD),
+                "avg_points": round(
+                    sum(a["points"] for a in mock_data.LEADERBOARD)
+                    / len(mock_data.LEADERBOARD)
+                ),
+                "top_points": mock_data.LEADERBOARD[0]["points"],
+                "bottom_points": mock_data.LEADERBOARD[-1]["points"],
+                "avg_job_points": round(
+                    sum(j["base_points"] for j in mock_data.JOB_TYPES) / len(mock_data.JOB_TYPES)
+                ),
+                "tier_counts": [
+                    {
+                        "tier": tier,
+                        "count": sum(
+                            1 for a in mock_data.LEADERBOARD
+                            if mock_data.get_tier(a["points"])["slug"] == tier["slug"]
+                        ),
+                    }
+                    for tier in mock_data.TIERS
+                ],
+            },
             # Scale figures for the landing page — all real values already in
             # mock_data, nothing invented for marketing copy.
             "scale_stats": [
@@ -59,13 +88,21 @@ def landing(request):
                 {"value": mock_data.DIRECTOR_PROFILE["warehouses"], "label": "Warehouses"},
                 {"value": len(mock_data.TIERS), "label": "Reward tiers"},
             ],
-            # Top of the real board, for the dashboard preview mockup.
+            # Dashboard mockup. It uses the ROSTER AVERAGE, not any individual's
+            # balance — a public page must not present one agent's figures.
+            # Initials only: a public mockup has no reason to publish who is
+            # on the board or what any one of them has earned.
             "preview_rows": [
-                dict(row, tier=mock_data.get_tier(row["points"]))
+                {
+                    "rank": row["rank"],
+                    "initials": "".join(w[0] for w in row["name"].split()[:2]).upper(),
+                    "tier": mock_data.get_tier(row["points"]),
+                }
                 for row in mock_data.LEADERBOARD[:3]
             ],
-            "preview_agent": agent,
-            "preview_tier": mock_data.get_tier(agent["points"]),
+            "preview_points": _avg_points,
+            "preview_tier": mock_data.get_tier(_avg_points),
+            "preview_next": _progress(_avg_points),
         },
     )
 

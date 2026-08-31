@@ -116,8 +116,9 @@
           <p class="sp-eyebrow mb-2">01</p>
           <h2>Earn points</h2>
           <p class="sp-muted mb-0 mt-2">
-            {{ agent.points_this_week }} points landed for the average agent last week.
-            Installs, upsells and CSAT all feed the same running total.
+            Installs, upsells and CSAT all feed one running total — a typical job
+            is worth around {{ roster.avg_job_points }} points, and every one is
+            visible the moment it clears review.
           </p>
         </div>
       </div>
@@ -136,8 +137,9 @@
           <p class="sp-eyebrow mb-2">03</p>
           <h2>Compete</h2>
           <p class="sp-muted mb-0 mt-2">
-            {% with tail=leaderboard|last %}The top {{ leaderboard|length }} agents are ranked live, from
-            {{ leaderboard.0.points }} points down to {{ tail.points }}. You are currently rank {{ agent.rank }}.{% endwith %}
+            {{ roster.count }} technicians are ranked live, from {{ roster.top_points }}
+            points down to {{ roster.bottom_points }}. Positions update the moment a
+            job clears review — no waiting for a monthly email.
           </p>
         </div>
       </div>
@@ -166,13 +168,13 @@
           <div class="sp-preview-body">
             <div class="sp-card p-3">
               <p class="sp-kpi-label mb-1">Points balance</p>
-              <p class="sp-balance mb-2">{{ preview_agent.points }}</p>
+              <p class="sp-balance mb-2">{{ preview_points }}</p>
               <span class="sp-tier sp-tier-{{ preview_tier.slug }}">{{ preview_tier.name }}</span>
-              {% if next_tier %}
+              {% if preview_next %}
               <div class="sp-progress mt-3" style="--tier-color: var(--tier-{{ preview_tier.slug }});">
-                <div class="sp-progress-fill" style="width: {{ next_tier.percent }}%"></div>
+                <div class="sp-progress-fill" style="width: {{ preview_next.percent }}%"></div>
               </div>
-              <p class="sp-muted sp-small mb-0 mt-2">{{ next_tier.needed }} points to {{ next_tier.name }}</p>
+              <p class="sp-muted sp-small mb-0 mt-2">{{ preview_next.needed }} points to {{ preview_next.name }}</p>
               {% endif %}
             </div>
 
@@ -181,15 +183,16 @@
               {% for row in preview_rows %}
               <div class="sp-preview-row">
                 <span class="sp-preview-rank">{{ row.rank }}</span>
-                <span class="sp-preview-agent">{{ row.name }}</span>
+                <span class="sp-avatar sp-avatar-sm" aria-hidden="true">{{ row.initials }}</span>
                 <span class="sp-tier sp-tier-{{ row.tier.slug }}">{{ row.tier.name }}</span>
-                <span class="sp-preview-pts">{{ row.points }}</span>
               </div>
               {% endfor %}
             </div>
           </div>
         </div>
-        <p class="sp-muted sp-small text-center mt-2 mb-0">A preview of the agent dashboard.</p>
+        <p class="sp-muted sp-small text-center mt-2 mb-0">
+          A preview of the agent dashboard, shown at the roster average.
+        </p>
       </div>
     </div>
   </div>
@@ -262,15 +265,20 @@
 
       <div class="col-lg-4 mt-4 mt-lg-0">
         <div class="sp-card p-4 h-100">
-          <p class="sp-eyebrow mb-2">Your standing</p>
-          <p class="mb-1"><span class="sp-tier sp-tier-{{ agent_tier.slug }}">{{ agent_tier.name }}</span></p>
-          <p class="sp-muted mt-3 mb-0">
-            {{ agent.points }} points.
-            {% if next_tier %}
-              {{ next_tier.needed }} more to reach {{ next_tier.name }} — {{ next_tier.percent }}% of the way there.
-            {% else %}
-              Top tier reached.
-            {% endif %}
+          <p class="sp-eyebrow mb-2">Where the field sits today</p>
+          <p class="sp-muted mb-3">
+            Across {{ roster.count }} technicians, averaging {{ roster.avg_points }} points each.
+          </p>
+          <div class="sp-stat-row">
+            {% for entry in roster.tier_counts %}
+            <div class="sp-tier-stat sp-tier-stat-{{ entry.tier.slug }}">
+              <p class="sp-tier-stat-value mb-0">{{ entry.count }}</p>
+              <p class="sp-tier-stat-label">{{ entry.tier.name }}</p>
+            </div>
+            {% endfor %}
+          </div>
+          <p class="sp-muted sp-small mb-0 mt-3">
+            Sign in to see your own position.
           </p>
         </div>
       </div>
