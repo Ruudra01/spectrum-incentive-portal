@@ -1,8 +1,12 @@
 __pycache__/
 *.py[cod]
 .venv/
-staticfiles/
 db.sqlite3
 .env
 .vercel
 .DS_Store
+
+# staticfiles/ is intentionally COMMITTED: Vercel does not run collectstatic,
+# and WhiteNoise serves these from inside the lambda. Re-run
+#   python manage.py collectstatic --noinput --clear
+# after changing anything in dashboard/static/.

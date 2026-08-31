@@ -262,20 +262,42 @@ python -c "from django.core.management.utils import get_random_secret_key as k; 
 Locally none of these are needed — every one falls back to a development
 default, so `manage.py runserver` still works with no setup.
 
-### Build
+### Vercel project settings
+
+| Field | Value |
+|---|---|
+| Framework Preset | **Other** |
+| Root Directory | `./` (repository root — `manage.py` must be at the top level) |
+| Build Command | *leave empty* |
+| Output Directory | *leave empty* |
+| Install Command | *leave empty* |
+
+`vercel.json` uses the `builds` key, which means **Vercel ignores the dashboard's
+Build and Output settings entirely** — anything typed there has no effect. The
+`@vercel/python` runtime installs `requirements.txt` on its own.
+
+### Why `staticfiles/` is committed
+
+There is **no build step**, so `collectstatic` never runs on Vercel — and with
+`CompressedManifestStaticFilesStorage` a missing manifest is not a graceful
+degradation, it is `ValueError: Missing staticfiles manifest entry` on **every
+page**. Committing the collected output removes that failure mode entirely: the
+files ship inside the lambda and WhiteNoise serves them with gzip and immutable
+cache headers.
+
+**The cost:** re-run this after changing anything under `dashboard/static/`,
+or the deployed site serves stale assets:
 
 ```bash
-pip install -r requirements.txt
-python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput --clear
 ```
+
+`django.contrib.admin` is removed from `INSTALLED_APPS` — it was not routed, and
+its static assets were 5.1MB of the 5.3MB collected output, all of it counting
+against the 15MB lambda limit. Without it the payload is 260KB.
 
 There is **no `migrate` step** — the project defines no models and uses
 signed-cookie sessions, so it needs no database.
-
-`vercel.json` routes `/static/*` to the collected output and everything else to
-`spectrum_portal/wsgi.py`, which exposes `app` for the `@vercel/python` runtime.
-Static files are served by **WhiteNoise** with hashed filenames, gzip and
-immutable cache headers, because Vercel's Python runtime will not serve them.
 
 ### What is deliberately not routed
 

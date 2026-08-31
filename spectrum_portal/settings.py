@@ -73,7 +73,8 @@ ENABLE_DEV_TOOLS = _env_flag("ENABLE_DEV_TOOLS", DEBUG)
 # Application definition
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    # django.contrib.admin is deliberately absent: it is not routed (no models,
+    # no migrations) and its 5.1MB of static assets would ship in the lambda.
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
