@@ -18,7 +18,7 @@
 
     <div class="sp-review-grid mt-3">
 
-      {# ---------- LIST PANE ---------- #}
+      <!-- {# ---------- LIST PANE ---------- #} -->
       <div class="sp-review-list">
         <div class="sp-card">
           <div class="sp-toolbar">
@@ -63,7 +63,7 @@
         </div>
       </div>
 
-      {# ---------- DETAIL PANE ---------- #}
+      <!-- {# ---------- DETAIL PANE ---------- #} -->
       <div class="sp-review-detail">
         {% if selected %}
         <form method="post" id="spReviewForm">
@@ -142,7 +142,7 @@
       </div>
     </div>
 
-    {# ---------- HISTORY ---------- #}
+    <!-- {# ---------- HISTORY ---------- #} -->
     <div class="sp-card p-4 mt-3">
       <button type="button" class="sp-disclose" id="spHistoryToggle" aria-expanded="false" aria-controls="spHistory">
         Decisions you've made ({{ history|length }})
@@ -177,7 +177,7 @@
   </div>
 </div>
 
-{# Approve-all confirmation #}
+<!-- {# Approve-all confirmation #} -->
 <div class="sp-modal-scrim" id="spBulkScrim" hidden>
   <div class="sp-modal" role="dialog" aria-modal="true" aria-labelledby="spBulkTitle">
     <h2 id="spBulkTitle">Approve all entries?</h2>
@@ -189,7 +189,7 @@
   </div>
 </div>
 
-{# Reopen note #}
+<!-- {# Reopen note #} -->
 <div class="sp-modal-scrim" id="spReopenScrim" hidden>
   <div class="sp-modal" role="dialog" aria-modal="true" aria-labelledby="spReopenTitle">
     <h2 id="spReopenTitle">Reopen this entry?</h2>

@@ -23,7 +23,7 @@
     {% endif %}
 
     {% if not creating %}
-    {# ---------------- LIST ---------------- #}
+    <!-- {# ---------------- LIST ---------------- #} -->
     <div class="sp-card mt-3" id="spProgramList">
       <div class="sp-toolbar">
         <div class="sp-chips" id="spProgramChips" role="group" aria-label="Filter by status">
@@ -93,7 +93,19 @@
     </div>
 
     {% else %}
-    {# ---------------- CREATE / EDIT ---------------- #}
+    <!-- {# ---------------- CREATE / EDIT ---------------- #} -->
+    <!-- {# Step chips span both columns so the first section card and the preview
+       card share a top edge. They are navigation; the in-card header is the
+       section title. #} -->
+    <ol class="sp-steps mt-3" id="spSteps">
+      <li><button type="button" class="sp-step-pip" data-step="1" aria-current="true">
+        <span>1</span> Basics</button></li>
+      <li><button type="button" class="sp-step-pip" data-step="2">
+        <span>2</span> Rules</button></li>
+      <li><button type="button" class="sp-step-pip" data-step="3">
+        <span>3</span> Budget &amp; target</button></li>
+    </ol>
+
     <div class="sp-program-grid mt-3">
       <div>
         <form method="post" id="spProgramForm" data-rate="{{ point_value }}" novalidate>
@@ -107,15 +119,13 @@
           </div>
           {% endif %}
 
-          <ol class="sp-steps" id="spSteps">
-            <li class="sp-step-pip" data-step="1"><span>1</span> Basics</li>
-            <li class="sp-step-pip" data-step="2"><span>2</span> Rules</li>
-            <li class="sp-step-pip" data-step="3"><span>3</span> Budget &amp; target</li>
-          </ol>
-
-          {# --- 1. Basics --- #}
-          <fieldset class="sp-card p-4 mb-3" data-section="1">
-            <legend class="sp-section-legend"><span class="sp-section-num" aria-hidden="true">1</span>Basics</legend>
+          <!-- {# --- 1. Basics --- #} -->
+          <fieldset class="sp-card sp-section-card mb-3" data-section="1"
+                    aria-labelledby="spSecHead1">
+            <div class="sp-section-head" id="spSecHead1">
+              <span class="sp-section-num" aria-hidden="true">1</span>
+              <span class="sp-section-name">Basics</span>
+            </div>
             <div class="sp-field">
               <label class="sp-label" for="spName">Program name</label>
               <input class="sp-control" type="text" id="spName" name="name" value="{{ editing.name|default:'' }}" required>
@@ -145,9 +155,13 @@
             </div>
           </fieldset>
 
-          {# --- 2. Rules --- #}
-          <fieldset class="sp-card p-4 mb-3" data-section="2">
-            <legend class="sp-section-legend"><span class="sp-section-num" aria-hidden="true">2</span>Rules</legend>
+          <!-- {# --- 2. Rules --- #} -->
+          <fieldset class="sp-card sp-section-card mb-3" data-section="2"
+                    aria-labelledby="spSecHead2">
+            <div class="sp-section-head" id="spSecHead2">
+              <span class="sp-section-num" aria-hidden="true">2</span>
+              <span class="sp-section-name">Rules</span>
+            </div>
             <div class="sp-field">
               <span class="sp-label">Qualifying job types</span>
               <div class="sp-mods" id="spJobTypes">
@@ -184,9 +198,13 @@
             <p class="sp-field-error mt-2" id="spRuleError" hidden>Add at least one bonus rule.</p>
           </fieldset>
 
-          {# --- 3. Budget & target --- #}
-          <fieldset class="sp-card p-4 mb-3" data-section="3">
-            <legend class="sp-section-legend"><span class="sp-section-num" aria-hidden="true">3</span>Budget &amp; target</legend>
+          <!-- {# --- 3. Budget & target --- #} -->
+          <fieldset class="sp-card sp-section-card mb-3" data-section="3"
+                    aria-labelledby="spSecHead3">
+            <div class="sp-section-head" id="spSecHead3">
+              <span class="sp-section-num" aria-hidden="true">3</span>
+              <span class="sp-section-name">Budget &amp; target</span>
+            </div>
             <div class="row g-2">
               <div class="col-sm-6 sp-field">
                 <label class="sp-label" for="spParticipants">Expected participants</label>
@@ -230,7 +248,7 @@
         </form>
       </div>
 
-      {# --- Live preview, exactly as the director will see it --- #}
+      <!-- {# --- Live preview, exactly as the director will see it --- #} -->
       <div>
         <div class="sp-card p-4 sp-form-sticky">
           <p class="sp-eyebrow mb-2">Preview</p>
@@ -254,7 +272,7 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
+<!-- {% block extra_js %} -->
 <script>
   (function () {
     /* --- list filtering / sorting --- */
@@ -361,6 +379,36 @@
     var budgetTouched = false;
     budget.addEventListener("input", function () { budgetTouched = true; });
 
+    /* Step chips are navigation: click scrolls to that section and marks it
+       current. An observer keeps the active chip in sync while scrolling. */
+    var chipButtons = Array.prototype.slice.call(document.querySelectorAll(".sp-step-pip"));
+    var sections = {};
+    document.querySelectorAll("[data-section]").forEach(function (el) {
+      sections[el.dataset.section] = el;
+    });
+    function setCurrentStep(step) {
+      chipButtons.forEach(function (chip) {
+        if (chip.dataset.step === String(step)) chip.setAttribute("aria-current", "true");
+        else chip.removeAttribute("aria-current");
+      });
+    }
+    chipButtons.forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        var target = sections[chip.dataset.step];
+        if (!target) return;
+        setCurrentStep(chip.dataset.step);
+        target.scrollIntoView({ behavior: SP.reducedMotion ? "auto" : "smooth", block: "start" });
+      });
+    });
+    if ("IntersectionObserver" in window) {
+      var stepWatcher = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) setCurrentStep(entry.target.dataset.section);
+        });
+      }, { rootMargin: "-20% 0px -70% 0px" });
+      Object.keys(sections).forEach(function (k) { stepWatcher.observe(sections[k]); });
+    }
+
     function render() {
       var rules = readRules();
       var jobs = checkedJobs();
@@ -391,7 +439,7 @@
         2: rules.length > 0 && jobs.length > 0,
         3: people > 0 && !!metric.value
       };
-      document.querySelectorAll(".sp-step-pip").forEach(function (pip) {
+      chipButtons.forEach(function (pip) {
         pip.classList.toggle("is-done", !!done[pip.dataset.step]);
       });
       return done;

@@ -1,8 +1,8 @@
-{% comment %}
+<!-- {% comment %}
 Work-log entry fields, shared by the Add-entry form and the Edit modal.
 `p` is an id prefix ("sp" for add, "ed" for edit) so both can live on the page
 at once. One markup source, and one JS implementation binds against it.
-{% endcomment %}
+{% endcomment %} -->
 <div class="sp-field">
   <label class="sp-label" for="{{ p }}JobType">Job type</label>
   <select class="sp-control" id="{{ p }}JobType" name="job_type" required>
@@ -19,11 +19,24 @@ at once. One markup source, and one JS implementation binds against it.
   <p class="sp-field-error" data-error="job_type" hidden></p>
 </div>
 
-<div class="sp-field">
-  <label class="sp-label" for="{{ p }}Ref">Work order</label>
-  <input class="sp-control" type="text" id="{{ p }}Ref" name="work_order_ref"
-         placeholder="WO-2026-0148" required>
-  <p class="sp-field-error" data-error="work_order_ref" hidden></p>
+<!-- {# Naturally paired fields share a row; the wider column has space for it. #} -->
+<div class="row g-2">
+  <div class="col-md-6 sp-field">
+    <label class="sp-label" for="{{ p }}Ref">Work order</label>
+    <input class="sp-control" type="text" id="{{ p }}Ref" name="work_order_ref"
+           placeholder="WO-2026-0148" required>
+    <p class="sp-field-error" data-error="work_order_ref" hidden></p>
+  </div>
+  <div class="col-md-6 sp-field">
+    <label class="sp-label" for="{{ p }}Duration">Duration (minutes)</label>
+    <div class="d-flex gap-2">
+      <input class="sp-control" type="number" id="{{ p }}Duration" name="duration_minutes"
+             min="1" max="1440" step="1" required>
+      <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="15">+15</button>
+      <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="30">+30</button>
+    </div>
+    <p class="sp-field-error" data-error="duration_minutes" hidden></p>
+  </div>
 </div>
 
 <div class="sp-field">
@@ -31,17 +44,6 @@ at once. One markup source, and one JS implementation binds against it.
   <input class="sp-control" type="text" id="{{ p }}Address" name="address_line"
          placeholder="Street and city" required>
   <p class="sp-field-error" data-error="address_line" hidden></p>
-</div>
-
-<div class="sp-field">
-  <label class="sp-label" for="{{ p }}Duration">Duration (minutes)</label>
-  <div class="d-flex gap-2">
-    <input class="sp-control" type="number" id="{{ p }}Duration" name="duration_minutes"
-           min="1" max="1440" step="1" required>
-    <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="15">+15</button>
-    <button type="button" class="btn-sp-secondary sp-btn-sm sp-step" data-step="30">+30</button>
-  </div>
-  <p class="sp-field-error" data-error="duration_minutes" hidden></p>
 </div>
 
 <div class="sp-field">
@@ -91,7 +93,7 @@ at once. One markup source, and one JS implementation binds against it.
   <p class="sp-muted sp-small mb-0 mt-1"><span data-role="notes-count">0</span>/280</p>
 </div>
 
-{# Live preview — recalculated from the same numbers the server uses. #}
+<!-- {# Live preview — recalculated from the same numbers the server uses. #} -->
 <div class="sp-preview" data-role="preview" aria-live="polite">
   <div class="sp-preview-line"><span>Base points</span><span data-role="base">0</span></div>
   <div data-role="preview-mods"></div>

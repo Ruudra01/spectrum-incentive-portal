@@ -61,7 +61,9 @@
             <div>
               <p class="sp-entry-title">{{ entry.job.label }}</p>
               <p class="sp-entry-meta">
-                {{ entry.work_order_ref }} &middot; {{ entry.address_line }} &middot; {{ entry.duration_minutes }} min
+                {{ entry.work_order_ref }} &middot;
+                <span class="sp-entry-address" title="{{ entry.address_line }}">{{ entry.address_line }}</span>
+                &middot; {{ entry.duration_minutes }} min
               </p>
             </div>
             <div class="sp-entry-points">
@@ -166,8 +168,11 @@
 <div class="modal fade" id="spEditModal" tabindex="-1" aria-labelledby="spEditTitle" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content sp-edit-modal">
-      <div class="modal-header">
-        <h2 class="modal-title sp-edit-modal-title" id="spEditTitle">Edit entry</h2>
+      <div class="modal-header sp-edit-modal-head">
+        <div>
+          <h2 class="modal-title sp-edit-modal-title" id="spEditTitle">Edit entry</h2>
+          <p class="sp-edit-modal-ref mb-0" id="spEditRef"></p>
+        </div>
         <button type="button" class="sp-modal-close" data-bs-dismiss="modal" aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
                stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -181,9 +186,12 @@
           <input type="hidden" name="date" value="{{ on_date }}">
           {% include "dashboard/partials/_entry_fields.html" with p="ed" %}
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer sp-edit-modal-foot">
           <button type="button" class="btn-sp-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn-sp-primary">Save changes</button>
+          <button type="submit" class="btn-sp-primary sp-edit-save" id="spEditSave">
+            <span class="sp-spinner" aria-hidden="true" hidden></span>
+            <span id="spEditSaveLabel">Save changes</span>
+          </button>
         </div>
       </form>
     </div>
@@ -410,10 +418,26 @@
       if (!button) return;
       lastTrigger = button;
       document.getElementById("edEntryId").value = button.dataset.entry;
+      document.getElementById("spEditRef").textContent = button.dataset.ref || "";
       editForm.fill(button.dataset);
+      document.body.classList.add("sp-modal-open");
     });
     modalEl.addEventListener("hidden.bs.modal", function () {
+      document.body.classList.remove("sp-modal-open");
+      var save = document.getElementById("spEditSave");
+      save.disabled = false;
+      save.querySelector(".sp-spinner").hidden = true;
+      document.getElementById("spEditSaveLabel").textContent = "Save changes";
       if (lastTrigger) lastTrigger.focus();
+    });
+
+    /* Saving state — the footer is fixed, so this stays visible. */
+    document.getElementById("spEditForm").addEventListener("submit", function () {
+      if (!editForm.validate()) return;
+      var save = document.getElementById("spEditSave");
+      save.disabled = true;
+      save.querySelector(".sp-spinner").hidden = false;
+      document.getElementById("spEditSaveLabel").textContent = "Saving…";
     });
 
     /* --- delete confirmation, inline rather than confirm() --- */

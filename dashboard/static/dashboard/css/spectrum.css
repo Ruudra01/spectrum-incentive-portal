@@ -1660,7 +1660,7 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
 .sp-log-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: 5fr 7fr;
+  grid-template-columns: 7fr 5fr;   /* form gets the width, entries the rest */
   /* The KPI row spans both columns so all four tiles sit on one line;
      everything else falls below it. The submit bar now lives inside the
      entries column, directly after the last entry. */
@@ -1801,15 +1801,28 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
 @media (max-width: 991.98px) { .sp-program-grid { grid-template-columns: 1fr; } }
 
 .sp-steps { display: flex; gap: .5rem; list-style: none; margin: 0 0 1rem; padding: 0; flex-wrap: wrap; }
+.sp-steps li { display: flex; }
 .sp-step-pip {
   display: flex; align-items: center; gap: .45rem;
   padding: .35rem .8rem;
   border: 1px solid var(--sp-border);
   border-radius: 999px;
+  background: none;
+  font-family: var(--sp-font);
   font-size: var(--sp-fs-4);
   color: var(--sp-muted);
-  transition: border-color var(--sp-ease), color var(--sp-ease);
+  cursor: pointer;
+  transition: border-color var(--sp-ease), color var(--sp-ease), background-color var(--sp-ease);
 }
+.sp-step-pip:hover { border-color: var(--sp-border-strong); color: var(--sp-navy); }
+.sp-step-pip:focus-visible { outline: 2px solid var(--sp-blue); outline-offset: 2px; }
+/* Active step reads as navigation; the card header is the section title. */
+.sp-step-pip[aria-current="true"] {
+  border-color: var(--sp-blue);
+  background-color: var(--sp-blue);
+  color: var(--sp-white);
+}
+.sp-step-pip[aria-current="true"] span { background-color: var(--sp-white); color: var(--sp-blue); }
 .sp-step-pip span {
   display: grid; place-items: center;
   width: 18px; height: 18px;
@@ -1821,16 +1834,32 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
 .sp-step-pip.is-done { border-color: var(--sp-blue); color: var(--sp-blue); }
 .sp-step-pip.is-done span { background-color: var(--sp-blue); color: var(--sp-white); }
 
-.sp-section-legend {
-  float: none;
-  width: auto;
-  margin-bottom: 1rem;
+/* The old <legend> sat on the fieldset border by spec, which read as a
+   rendering bug. The header is now an ordinary row inside the card. */
+.sp-section-card { padding: 0; }
+.sp-section-head {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid var(--sp-border);
+}
+.sp-section-name {
   font-size: var(--sp-fs-4);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .08em;
-  color: var(--sp-muted);
+  color: var(--sp-navy);
 }
+.sp-section-card > .sp-field,
+.sp-section-card > .row,
+.sp-section-card > .sp-label,
+.sp-section-card > p,
+.sp-section-card > div:not(.sp-section-head),
+.sp-section-card > hr,
+.sp-section-card > button { margin-left: 1.5rem; margin-right: 1.5rem; }
+.sp-section-card > *:last-child { margin-bottom: 1.5rem; }
+.sp-section-card > .sp-section-head + * { margin-top: 1.25rem; }
 
 .sp-rule-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: .4rem;
@@ -2252,3 +2281,66 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
   .sp-answers { flex-direction: column; }
   .sp-answers-cta { margin-left: 0; align-self: stretch; text-align: center; }
 }
+
+/* ===============================================================
+   Edit-entry modal: fixed header, scrolling body, fixed footer
+   =============================================================== */
+.sp-edit-modal-head { align-items: flex-start; }
+.sp-edit-modal-ref {
+  margin-top: .15rem;
+  font-size: var(--sp-fs-4);
+  color: var(--sp-muted);
+  font-variant-numeric: tabular-nums;
+}
+.sp-modal-close:focus-visible { outline: 2px solid var(--sp-blue); outline-offset: 2px; }
+.sp-modal-close { min-width: 32px; min-height: 32px; }
+.sp-modal-close:hover { color: var(--sp-text); }
+
+/* The body scrolls; header and footer stay put so Save is always reachable. */
+.sp-edit-modal .modal-body {
+  max-height: 65vh;
+  overflow-y: auto;
+  padding-bottom: 1.75rem;      /* last field never sits flush on the divider */
+  scrollbar-width: thin;
+  scrollbar-color: var(--sp-border-strong) var(--sp-bg);
+}
+.sp-edit-modal .modal-body::-webkit-scrollbar { width: 8px; }
+.sp-edit-modal .modal-body::-webkit-scrollbar-track {
+  background-color: var(--sp-bg);
+  border-radius: 999px;
+}
+.sp-edit-modal .modal-body::-webkit-scrollbar-thumb {
+  background-color: var(--sp-border-strong);
+  border-radius: 999px;
+}
+.sp-edit-modal .modal-body::-webkit-scrollbar-thumb:hover { background-color: var(--sp-muted); }
+
+.sp-edit-modal-foot { justify-content: flex-end; gap: .5rem; }
+.sp-edit-save { display: inline-flex; align-items: center; gap: .5rem; }
+.sp-edit-save:disabled { opacity: .7; cursor: wait; }
+
+/* Belt and braces alongside Bootstrap's own scroll lock. */
+body.sp-modal-open { overflow: hidden; }
+
+/* Short viewports: keep the footer reachable rather than clipping it. */
+@media (max-height: 640px) {
+  .sp-edit-modal .modal-body { max-height: 52vh; }
+}
+
+/* ===============================================================
+   Entries column at its narrower width
+   =============================================================== */
+.sp-entry-address {
+  display: inline-block;
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+.sp-entry-top { flex-wrap: wrap; }
+.sp-entry-chips { row-gap: .35rem; }
+
+/* Label stacks above the button instead of wrapping mid-phrase. */
+.sp-submitbar { flex-wrap: wrap; row-gap: .75rem; }
+.sp-submitbar-text { flex: 1 1 220px; }
