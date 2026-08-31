@@ -219,6 +219,67 @@ curl -X POST http://127.0.0.1:8000/dev/reset-store/
 > different worlds. `manage.py runserver` is single-process by default, which is
 > what this demo needs.
 
+## About the mock data
+
+Every figure in the portal is either **seeded ground truth** or **derived from
+it** — nothing is typed twice, so no two cards can drift apart.
+
+**Seeded (the only real inputs):** tier thresholds, job base points, point
+modifiers, `POINT_VALUE_USD`, the five archetypes, each agent's archetype
+assignment, and prior-period actuals (`KPI_PREVIOUS`, `TEAM_PREVIOUS`) so a
+"vs last month" delta has something real to be a delta *of*.
+
+**Derived at import:** an agent's points balance is the sum of their approved
+entry points; rank is their position after sorting by points; tier is
+`get_tier(points)`; the 8-week sparkline is those same entries bucketed by
+week; team and territory totals are sums over their members; and a program's
+budget is `participants × bonus points × POINT_VALUE_USD` — the cost of an
+incentive is what it pays out.
+
+### Two levels of truth, deliberately
+
+Dana plus the five agents whose logs the manager queue needs carry
+**entry-level** history — every point traces to a logged job. The other twelve
+carry **aggregate-only** monthly totals from their archetype, because seeding
+hundreds of entries for agents nobody drills into would be noise. Both levels
+sit on the same scale: daily job volume is computed *from* the archetype's
+monthly target, so a derived balance lands in the same range as an aggregate
+one for the same kind of agent.
+
+### Archetypes
+
+The roster is generated from five kinds of technician rather than random
+numbers, so the metrics correlate the way real field-service metrics do:
+
+| Archetype | Reads as |
+|---|---|
+| Veteran high performer | long tenure, low repeat rate, Gold |
+| Steady mid-tier | the Silver bulk of the team |
+| Fast but sloppy | high volume and overtime, so higher callbacks and lower CSAT |
+| New hire ramping | under 6 months, Bronze, more callbacks, fewer audits passed |
+| Burnout risk | the only agents above 12 overtime hours — exactly who the burnout watch flags |
+
+The self-check enforces these relationships: no Gold agent may carry a high
+repeat rate, nobody under six months' tenure may be above Bronze, and only the
+burnout archetype may breach the overtime line.
+
+### Why volume is 1–3 jobs a day
+
+At roughly 125 points a job, 3–7 jobs a day earns ~12,000 points a month and
+every agent clears Gold (5,000) within a week, which makes the tier system
+meaningless. Daily volume is sized so a month's work lands in the same range as
+the thresholds it is measured against.
+
+### Reading the money cards
+
+Two dollar figures on the dashboard cover different windows, each labelled on
+the card: **Earned today** is today's approved work only ($0 on a quiet
+morning is correct), while **Earned this period** is all approved work to date.
+
+```bash
+.venv/bin/python dashboard/mock_data.py     # asserts the derivations hold
+```
+
 ## Roles
 
 Three roles, three demo accounts. **Password for all three: `spectrum2026`.**

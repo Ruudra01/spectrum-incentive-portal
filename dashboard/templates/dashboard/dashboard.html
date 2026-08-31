@@ -35,6 +35,7 @@
         <div class="sp-card sp-kpi">
           <p class="sp-kpi-label">
             <span class="sp-live-dot" aria-hidden="true"></span>Earned today
+            <span class="sp-window-note d-block">{% now "l, j M" %} only</span>
           </p>
           <p class="sp-kpi-value sp-earned mb-2">
             $<span data-count="{{ today_summary.est_value|floatformat:2 }}" data-count-decimals="2">0</span>
@@ -208,6 +209,7 @@
         {# --- Dollar ledger --- #}
         <div class="sp-card p-4 mt-3">
           <p class="sp-kpi-label mb-1">Earned this period</p>
+          <p class="sp-window-note mb-2">All approved work to date</p>
           <p class="sp-ledger-value mb-3">$<span data-count="{{ ledger.approved_usd|floatformat:2 }}" data-count-decimals="2">0</span></p>
 
           <div class="sp-ledger-row">

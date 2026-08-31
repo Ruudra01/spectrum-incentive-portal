@@ -1851,15 +1851,15 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
   letter-spacing: .08em;
   color: var(--sp-navy);
 }
-.sp-section-card > .sp-field,
-.sp-section-card > .row,
-.sp-section-card > .sp-label,
-.sp-section-card > p,
-.sp-section-card > div:not(.sp-section-head),
-.sp-section-card > hr,
-.sp-section-card > button { margin-left: 1.5rem; margin-right: 1.5rem; }
-.sp-section-card > *:last-child { margin-bottom: 1.5rem; }
-.sp-section-card > .sp-section-head + * { margin-top: 1.25rem; }
+/* Body scrolls; the header row above it does not. */
+.sp-section-body {
+  max-height: 62vh;
+  padding: 1.25rem 1.5rem 1.75rem;   /* bottom room so the last field breathes */
+}
+/* Stacked mobile layouts make internal scroll containers a usability trap. */
+@media (max-width: 991.98px) {
+  .sp-section-body { max-height: none; overflow-y: visible; }
+}
 
 .sp-rule-row {
   display: flex; flex-wrap: wrap; align-items: center; gap: .4rem;
@@ -1926,8 +1926,31 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
 .sp-terr-line { fill: none; stroke: var(--sp-blue); stroke-width: 1.75; }
 .sp-terr-line-alt { fill: none; stroke: var(--sp-navy); stroke-width: 1.5; stroke-dasharray: 5 3; }
 
-.sp-legend-row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; font-size: var(--sp-fs-4); color: var(--sp-muted); }
-.sp-legend-key { display: inline-block; width: 18px; height: 0; margin-right: .35rem; vertical-align: middle; border-top: 2px solid; }
+/* .sp-legend-key wraps the swatch AND its label, so it must be a flex row —
+   styling it as the 18px line itself collapsed the label into a zero-height
+   box and ran the two entries together. The swatch is the inner span. */
+.sp-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem 1.5rem;
+  align-items: center;
+  font-size: var(--sp-fs-4);
+  color: var(--sp-muted);
+}
+.sp-legend-key {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  white-space: nowrap;
+}
+.sp-legend-key-solid,
+.sp-legend-key-dashed {
+  display: inline-block;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 0;
+  border-top-width: 2px;
+}
 .sp-legend-key-solid { border-top-style: solid; border-top-color: var(--sp-blue); }
 .sp-legend-key-dashed { border-top-style: dashed; border-top-color: var(--sp-navy); }
 
@@ -2296,24 +2319,28 @@ h3, h4, h5, h6 { font-size: var(--sp-fs-3); line-height: 1.4; }
 .sp-modal-close { min-width: 32px; min-height: 32px; }
 .sp-modal-close:hover { color: var(--sp-text); }
 
-/* The body scrolls; header and footer stay put so Save is always reachable. */
+/* Reusable thin scrollbar for any internal scroll container. */
+.sp-scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sp-border-strong) var(--sp-bg);
+}
+.sp-scroll::-webkit-scrollbar { width: 8px; }
+.sp-scroll::-webkit-scrollbar-track { background-color: var(--sp-bg); border-radius: 999px; }
+.sp-scroll::-webkit-scrollbar-thumb { background-color: var(--sp-border-strong); border-radius: 999px; }
+.sp-scroll::-webkit-scrollbar-thumb:hover { background-color: var(--sp-muted); }
+
+/* The modal body scrolls; header and footer stay put so Save is reachable. */
 .sp-edit-modal .modal-body {
   max-height: 65vh;
+  padding-bottom: 1.75rem;
   overflow-y: auto;
-  padding-bottom: 1.75rem;      /* last field never sits flush on the divider */
   scrollbar-width: thin;
   scrollbar-color: var(--sp-border-strong) var(--sp-bg);
 }
 .sp-edit-modal .modal-body::-webkit-scrollbar { width: 8px; }
-.sp-edit-modal .modal-body::-webkit-scrollbar-track {
-  background-color: var(--sp-bg);
-  border-radius: 999px;
-}
-.sp-edit-modal .modal-body::-webkit-scrollbar-thumb {
-  background-color: var(--sp-border-strong);
-  border-radius: 999px;
-}
-.sp-edit-modal .modal-body::-webkit-scrollbar-thumb:hover { background-color: var(--sp-muted); }
+.sp-edit-modal .modal-body::-webkit-scrollbar-track { background-color: var(--sp-bg); border-radius: 999px; }
+.sp-edit-modal .modal-body::-webkit-scrollbar-thumb { background-color: var(--sp-border-strong); border-radius: 999px; }
 
 .sp-edit-modal-foot { justify-content: flex-end; gap: .5rem; }
 .sp-edit-save { display: inline-flex; align-items: center; gap: .5rem; }
@@ -2344,3 +2371,27 @@ body.sp-modal-open { overflow: hidden; }
 /* Label stacks above the button instead of wrapping mid-phrase. */
 .sp-submitbar { flex-wrap: wrap; row-gap: .75rem; }
 .sp-submitbar-text { flex: 1 1 220px; }
+
+/* Program form actions stay reachable without scrolling past three sections. */
+.sp-form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding: .9rem 0;
+  background-color: var(--sp-bg);
+  border-top: 1px solid var(--sp-border);
+}
+@media (max-width: 991.98px) { .sp-form-actions { position: static; } }
+
+/* Which window a money figure covers — so $0 today beside $1,284 this period
+   reads as two different questions rather than a contradiction. */
+.sp-window-note {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: .02em;
+  color: var(--sp-muted);
+  text-transform: none;
+}
+
+/* Hairline separating the two trend bands. */
+.sp-terr-divider { stroke: var(--sp-border); stroke-width: 1; }

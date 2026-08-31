@@ -156,7 +156,6 @@
           </form>
         </div>
       </div>
-      </div>
 
 
     </div>
@@ -179,7 +178,7 @@
         </button>
       </div>
       <form method="post" id="spEditForm" novalidate>
-        <div class="modal-body">
+        <div class="modal-body sp-scroll">
           {% csrf_token %}
           <input type="hidden" name="action" value="update">
           <input type="hidden" name="entry_id" value="" id="edEntryId">

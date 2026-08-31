@@ -229,19 +229,30 @@
         var n = DATA.points.length;
 
         var xAt = function (i) { return padX + i * (W - padX * 2) / (n - 1); };
-        var scaleY = function (values) {
+
+        /* Each series gets its OWN horizontal band. Scaling both to the full
+           height put points (rising) and repeat rate (falling) on top of each
+           other through the middle of the chart, which is what made them
+           unreadable. Points occupy the upper band, repeat rate the lower. */
+        var scaleBand = function (values, top, bottom) {
           var lo = Math.min.apply(null, values), hi = Math.max.apply(null, values);
           var span = (hi - lo) || 1;
-          return function (v) { return H - padY - (v - lo) / span * (H - padY * 2); };
+          return function (v) { return bottom - (v - lo) / span * (bottom - top); };
         };
-        var yPoints = scaleY(DATA.points);
-        var yRepeat = scaleY(DATA.repeat);
+        var yPoints = scaleBand(DATA.points, padY, H * 0.52);
+        var yRepeat = scaleBand(DATA.repeat, H * 0.68, H - padY);
 
         var toPolyline = function (values, yFn) {
           var pts = [];
           for (var i = 0; i < n; i++) pts.push(xAt(i).toFixed(1) + "," + yFn(values[i]).toFixed(1));
           return pts.join(" ");
         };
+
+        var divider = document.createElementNS(ns, "line");
+        divider.setAttribute("class", "sp-terr-divider");
+        divider.setAttribute("x1", padX); divider.setAttribute("x2", W - padX);
+        divider.setAttribute("y1", H * 0.60); divider.setAttribute("y2", H * 0.60);
+        trendSvg.appendChild(divider);
 
         var solidLine = document.createElementNS(ns, "polyline");
         solidLine.setAttribute("class", "sp-terr-line");

@@ -93,10 +93,12 @@
     </div>
 
     {% else %}
-    <!-- {# ---------------- CREATE / EDIT ---------------- #} -->
-    <!-- {# Step chips span both columns so the first section card and the preview
-       card share a top edge. They are navigation; the in-card header is the
-       section title. #} -->
+    {# ---------------- CREATE / EDIT ---------------- #}
+    {% comment %}
+      Step chips span both columns so the first section card and the preview
+      card share a top edge. They are navigation; the in-card header is the
+      section title.
+    {% endcomment %}
     <ol class="sp-steps mt-3" id="spSteps">
       <li><button type="button" class="sp-step-pip" data-step="1" aria-current="true">
         <span>1</span> Basics</button></li>
@@ -126,6 +128,7 @@
               <span class="sp-section-num" aria-hidden="true">1</span>
               <span class="sp-section-name">Basics</span>
             </div>
+            <div class="sp-section-body sp-scroll">
             <div class="sp-field">
               <label class="sp-label" for="spName">Program name</label>
               <input class="sp-control" type="text" id="spName" name="name" value="{{ editing.name|default:'' }}" required>
@@ -153,6 +156,7 @@
                 {% endfor %}
               </select>
             </div>
+            </div>
           </fieldset>
 
           <!-- {# --- 2. Rules --- #} -->
@@ -162,6 +166,7 @@
               <span class="sp-section-num" aria-hidden="true">2</span>
               <span class="sp-section-name">Rules</span>
             </div>
+            <div class="sp-section-body sp-scroll">
             <div class="sp-field">
               <span class="sp-label">Qualifying job types</span>
               <div class="sp-mods" id="spJobTypes">
@@ -196,6 +201,7 @@
             </div>
             <button type="button" class="btn-sp-secondary sp-btn-sm mt-2" id="spAddRule">Add rule</button>
             <p class="sp-field-error mt-2" id="spRuleError" hidden>Add at least one bonus rule.</p>
+            </div>
           </fieldset>
 
           <!-- {# --- 3. Budget & target --- #} -->
@@ -205,6 +211,7 @@
               <span class="sp-section-num" aria-hidden="true">3</span>
               <span class="sp-section-name">Budget &amp; target</span>
             </div>
+            <div class="sp-section-body sp-scroll">
             <div class="row g-2">
               <div class="col-sm-6 sp-field">
                 <label class="sp-label" for="spParticipants">Expected participants</label>
@@ -234,6 +241,7 @@
                        min="0" value="{{ editing.success_target|default:0 }}">
               </div>
             </div>
+            </div>
           </fieldset>
 
           <div class="sp-card p-3 mb-3" id="spIncomplete" hidden>
@@ -241,7 +249,7 @@
             <ul class="sp-missing mb-0" id="spMissing"></ul>
           </div>
 
-          <div class="d-flex flex-wrap gap-2">
+          <div class="d-flex flex-wrap gap-2 sp-form-actions">
             <button type="submit" class="btn-sp-secondary" id="spSaveDraftBtn">Save as draft</button>
             <button type="submit" class="btn-sp-primary" id="spSubmitBtn">Submit for director approval</button>
           </div>

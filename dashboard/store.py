@@ -28,11 +28,12 @@ _LOCK = threading.Lock()
 
 # Work-log lifecycle: draft -> submitted -> approved | rejected | changes_requested
 # changes_requested returns an entry to editable while keeping the reviewer note.
-STATUS_DRAFT = "draft"
-STATUS_SUBMITTED = "submitted"
-STATUS_APPROVED = "approved"
-STATUS_REJECTED = "rejected"
-STATUS_CHANGES = "changes_requested"
+# Defined in mock_data because the seed history there needs them.
+STATUS_DRAFT = mock_data.STATUS_DRAFT
+STATUS_SUBMITTED = mock_data.STATUS_SUBMITTED
+STATUS_APPROVED = mock_data.STATUS_APPROVED
+STATUS_REJECTED = mock_data.STATUS_REJECTED
+STATUS_CHANGES = mock_data.STATUS_CHANGES
 
 EDITABLE_STATUSES = (STATUS_DRAFT, STATUS_CHANGES)
 
@@ -55,61 +56,19 @@ PROGRAM_REJECTED = "rejected"
 
 
 
-_JOB_MIX = [
-    "new_install_residential", "new_install_residential", "service_repair",
-    "signal_troubleshoot", "equipment_swap", "upgrade_premium_router",
-    "new_install_commercial", "aerial_line_work", "underground_drop",
-    "customer_education",
-]
 
-_STREETS = [
-    "1420 Neil Ave, Columbus", "88 Grandview Ave, Columbus",
-    "3307 Indianola Ave, Columbus", "615 Parsons Ave, Columbus",
-    "2210 Henderson Rd, Columbus", "47 Hudson St, Columbus",
-    "1902 Olentangy River Rd, Columbus", "760 Kenny Rd, Columbus",
-    "5140 Sinclair Rd, Columbus", "231 Chittenden Ave, Columbus",
-]
 
 # The five reports besides Dana whose history seeds Marcus's queue and team views.
-_SEEDED_AGENTS = [
-    (417, "Dana Whitfield"),
-    (803, "Ibrahim Cole"),
-    (521, "Sofia Marchetti"),
-    (288, "Grace Okonkwo"),
-    (731, "Alonzo Reyes"),
-    (540, "Tomas Lindqvist"),
-]
-
-
-def _entry(counter, agent_id, agent_name, on_date, job_type, modifiers, minutes,
-           street, status, ref_n, review_note="", reviewer="Marcus Vale"):
-    decided = status in (STATUS_APPROVED, STATUS_REJECTED, STATUS_CHANGES)
-    submitted = status != STATUS_DRAFT
-    return {
-        "id": next(counter),
-        "agent_id": agent_id,
-        "agent_name": agent_name,
-        "manager_id": 884,
-        "date": on_date.isoformat(),
-        "job_type": job_type,
-        "work_order_ref": f"WO-2026-{ref_n:04d}",
-        "address_line": street,
-        "duration_minutes": minutes,
-        "modifiers": list(modifiers),
-        "notes": "",
-        "points": mock_data.calculate_points(job_type, modifiers),
-        "status": status,
-        "submitted_at": f"{on_date.isoformat()} 17:40" if submitted else None,
-        "reviewed_at": f"{(on_date + timedelta(days=1)).isoformat()} 08:15" if decided else None,
-        "reviewer_id": 884 if decided else None,
-        "review_note": review_note,
-    }
 
 
 
 def _program(pid, name, description, created_by, owner_name, team, status,
              start, end, job_types, rules, budget, participants,
              metric, target, scope="team", note="", reviewed_by=None, reviewed_at=None):
+    # Budget is DERIVED from the program's own rules, never typed: the cost of
+    # an incentive is what it pays out. `budget` is ignored; the signature
+    # keeps it so the seed rows below stay readable.
+    budget = round(sum(r["bonus"] for r in rules) * participants * mock_data.POINT_VALUE_USD)
     return {
         "id": pid, "name": name, "description": description,
         "created_by": created_by, "owner_name": owner_name,
@@ -132,21 +91,21 @@ def _seed_programs():
         _program(1, "Q4 Upsell Accelerator",
                  "Double down on mobile line attachments through the Q4 push.",
                  884, "Marcus Vale", "Columbus North", PROGRAM_PENDING,
-                 "2026-10-01", "2026-12-31",
+                 "2026-09-30", "2026-12-29",
                  ["new_install_residential", "upgrade_premium_router"],
                  [{"count": 5, "job_type": "new_install_residential", "bonus": 250}],
                  45000, 18, "increase_attach", 12),
         _program(2, "Safety Streak Bonus",
                  "Reward six consecutive clean safety audits.",
                  885, "Deirdre Kwan", "Cleveland East", PROGRAM_PENDING,
-                 "2026-09-01", "2026-11-30",
+                 "2026-09-25", "2026-12-24",
                  ["aerial_line_work", "underground_drop"],
                  [{"count": 6, "job_type": "aerial_line_work", "bonus": 300}],
                  18000, 24, "improve_on_time", 4),
         _program(3, "Summer Install Sprint",
                  "Seasonal multiplier on completed residential installs.",
                  884, "Marcus Vale", "Columbus North", PROGRAM_APPROVED,
-                 "2026-06-01", "2026-08-31",
+                 "2026-07-17", "2026-10-15",
                  ["new_install_residential", "new_install_commercial"],
                  [{"count": 10, "job_type": "new_install_residential", "bonus": 400}],
                  32000, 18, "reduce_repeat", 3,
@@ -155,7 +114,7 @@ def _seed_programs():
         _program(4, "Weekend Coverage Pilot",
                  "Premium points for Saturday appointment slots.",
                  886, "Hollis Barrera", "Toledo West", PROGRAM_REJECTED,
-                 "2026-07-01", "2026-09-30",
+                 "2026-07-02", "2026-08-26",
                  ["service_repair", "signal_troubleshoot"],
                  [{"count": 4, "job_type": "service_repair", "bonus": 180}],
                  26000, 21, "raise_csat", 4,
@@ -164,96 +123,10 @@ def _seed_programs():
     ]
 
 
-def _seed_work_logs():
-    """About three weeks of history so every view has real content."""
-    rng = random.Random(20260828)
-    counter = itertools.count(1)
-    today = date.today()
-    logs = []
-    ref = 100
-
-    for agent_id, agent_name in _SEEDED_AGENTS:
-        is_dana = agent_id == 417
-        # Dana carries the richest history; the others seed the manager queue.
-        for days_back in range(21, 0, -1):
-            day = today - timedelta(days=days_back)
-            if day.weekday() == 6:            # no Sunday work
-                continue
-            if not is_dana and rng.random() < 0.45:
-                continue
-
-            for _ in range(rng.randint(2, 4) if is_dana else rng.randint(1, 2)):
-                ref += 1
-                job = rng.choice(_JOB_MIX)
-                base_minutes = mock_data.JOB_TYPES_BY_CODE[job]["est_minutes"]
-                minutes = base_minutes + rng.choice([-15, -10, 0, 0, 10, 20, 30])
-                modifiers = []
-                if rng.random() < 0.45:
-                    modifiers.append("first_time_fix")
-                if rng.random() < 0.20:
-                    modifiers.append("premium_upsell")
-                if rng.random() < 0.12:
-                    modifiers.append("after_hours")
-                if rng.random() < 0.08:
-                    modifiers.append("adverse_weather")
-
-                status = STATUS_APPROVED
-                note = ""
-                # A few of the other agents leave work awaiting review.
-                if not is_dana and days_back <= 3 and rng.random() < 0.7:
-                    status = STATUS_SUBMITTED
-                logs.append(_entry(counter, agent_id, agent_name, day, job,
-                                   modifiers, minutes, rng.choice(_STREETS),
-                                   status, ref, note))
-
-    # The random draws above make the queue size depend on the weekday, so on
-    # some days the manager's review queue seeded nearly empty. Guarantee each
-    # of the other agents leaves exactly one submission awaiting review.
-    for agent_id, agent_name in _SEEDED_AGENTS:
-        if agent_id == 417:
-            continue
-        theirs = [l for l in logs if l["agent_id"] == agent_id]
-        if any(l["status"] == STATUS_SUBMITTED for l in theirs) or not theirs:
-            continue
-        latest = max(theirs, key=lambda l: l["date"])
-        latest["status"] = STATUS_SUBMITTED
-        latest["reviewed_at"] = None
-        latest["reviewer_id"] = None
-
-    # Dana's specific review outcomes, so the UI shows every state.
-    ref += 1
-    logs.append(_entry(counter, 417, "Dana Whitfield", today - timedelta(days=12),
-                       "equipment_swap", [], 35, "47 Hudson St, Columbus",
-                       STATUS_REJECTED, ref,
-                       "Work order WO-2026-0091 already covers this swap."))
-    ref += 1
-    logs.append(_entry(counter, 417, "Dana Whitfield", today - timedelta(days=6),
-                       "aerial_line_work", ["after_hours"], 145,
-                       "5140 Sinclair Rd, Columbus", STATUS_REJECTED, ref,
-                       "After-hours flag needs dispatch approval on file."))
-    ref += 1
-    logs.append(_entry(counter, 417, "Dana Whitfield", today - timedelta(days=3),
-                       "new_install_commercial", ["premium_upsell"], 165,
-                       "760 Kenny Rd, Columbus", STATUS_CHANGES, ref,
-                       "Add the suite number to the work order and resubmit."))
-
-    # Two drafts from today, ready to submit.
-    ref += 1
-    logs.append(_entry(counter, 417, "Dana Whitfield", today,
-                       "new_install_residential", ["first_time_fix"], 85,
-                       "1420 Neil Ave, Columbus", STATUS_DRAFT, ref))
-    ref += 1
-    logs.append(_entry(counter, 417, "Dana Whitfield", today,
-                       "signal_troubleshoot", ["first_time_fix", "adverse_weather"], 80,
-                       "3307 Indianola Ave, Columbus", STATUS_DRAFT, ref))
-
-    return logs
-
-
 def _seed():
     """The state a fresh process (or a reset) starts from."""
     return {
-        "work_logs": _seed_work_logs(),
+        "work_logs": copy.deepcopy(mock_data.SEED_WORK_LOGS),
         "programs": _seed_programs(),
         "notifications": [],
     }
@@ -1136,7 +1009,13 @@ if __name__ == "__main__":
     assert metrics1["bonus_points"] == 250
     assert metrics1["projected_points"] == 250 * 18
     assert metrics1["projected_value"] == round(250 * 18 * mock_data.POINT_VALUE_USD, 2)
-    assert metrics1["cost_per_participant"] == round(45000 / 18, 2)
+    _p1 = get_program(1)
+    assert metrics1["cost_per_participant"] == round(
+        _p1["budget_estimate"] / _p1["expected_participants"], 2)
+    # Budget is derived from the program's own rules.
+    assert _p1["budget_estimate"] == round(
+        sum(r["bonus"] for r in _p1["bonus_structure"])
+        * _p1["expected_participants"] * mock_data.POINT_VALUE_USD)
     assert metrics1["duration_weeks"] == math.ceil(
         (date(2026, 12, 31) - date(2026, 10, 1)).days / 7)
 
@@ -1152,20 +1031,27 @@ if __name__ == "__main__":
     assert 0 <= budget["used_percent"] <= 100
 
     # program_conflicts: a genuine overlap is found; disjoint job types are not.
-    assert program_conflicts(get_program(1)) == [], "nothing approved overlaps program 1 yet"
+    # Program 1 now genuinely overlaps the approved one in both dates and job
+    # types, which is exactly what the conflict check exists to surface.
+    _conf = program_conflicts(get_program(1))
+    assert all(c["status"] == PROGRAM_APPROVED for c in _conf)
+    assert all(c["overlap_job_types"] for c in _conf)
+    _p1 = get_program(1)
     overlap = create_program(884, "Marcus Vale", name="Overlap Test",
-                             start_date="2026-11-01", end_date="2026-11-30",
+                             start_date=_p1["start_date"], end_date=_p1["end_date"],
                              job_types=["new_install_residential"],
                              status=PROGRAM_APPROVED, budget_estimate=5000,
                              expected_participants=10)
     disjoint = create_program(884, "Marcus Vale", name="Disjoint Test",
-                              start_date="2026-11-01", end_date="2026-11-30",
+                              start_date=_p1["start_date"], end_date=_p1["end_date"],
                               job_types=["service_repair"],
                               status=PROGRAM_APPROVED, budget_estimate=3000,
                               expected_participants=5)
     conflicts = program_conflicts(get_program(1))
-    assert [c["id"] for c in conflicts] == [overlap["id"]], "only the shared-job-type overlap counts"
-    assert conflicts[0]["overlap_job_types"] == ["new_install_residential"]
+    ids = [c["id"] for c in conflicts]
+    assert overlap["id"] in ids, "a shared-job-type overlap must be reported"
+    assert disjoint["id"] not in ids, "disjoint job types are not a conflict"
+    assert all(c["overlap_job_types"] for c in conflicts)
 
     # get_pending_programs: oldest first, all pending.
     pending = get_pending_programs()
